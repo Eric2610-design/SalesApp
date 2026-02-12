@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { parseDealerRowsFromFile } from '../lib/parseClient';
+import { useEffect, useMemo, useState } from 'react';
+import { getSheetPreview, parseDealerRowsFromSheet } from '../lib/parseClient';
 
 const COUNTRIES = [
   { code: 'DE', label: 'Deutschland (DE)' },
@@ -13,9 +13,33 @@ function fmt(n) {
   return new Intl.NumberFormat('de-CH').format(n);
 }
 
+function MappingSelect({ label, columns, value, onChange, disabled }) {
+  return (
+    <div style={{ minWidth: 220 }}>
+      <label>{label}</label><br />
+      <select value={String(value)} onChange={(e) => onChange(Number(e.target.value))} disabled={disabled}>
+        <option value={-1}>(keine)</option>
+        {columns.map(c => (
+          <option key={c.idx} value={c.idx}>{c.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function Page() {
   const [countryCode, setCountryCode] = useState('DE');
   const [file, setFile] = useState(null);
+
+  const [sheet, setSheet] = useState(null); // {rows, hasHeader, columns, sampleRows, suggestedMapping}
+  const [mapping, setMapping] = useState({
+    customer_number: 0,
+    name: 1,
+    street: 2,
+    postal_code: 3,
+    city: 4,
+  });
+
   const [parsed, setParsed] = useState([]); // local preview rows
   const [dbRows, setDbRows] = useState([]); // rows fetched from supabase
   const [filterCountry, setFilterCountry] = useState('ALL');
@@ -23,6 +47,29 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    async function run() {
+      if (!file) {
+        setSheet(null);
+        return;
+      }
+      setBusy(true);
+      setError('');
+      setToast('');
+      try {
+        const prev = await getSheetPreview(file);
+        setSheet(prev);
+        setMapping(prev.suggestedMapping);
+        setToast('Datei geladen. Bitte Spalten zuordnen und dann „Parsen“ klicken.');
+      } catch (e) {
+        setError(e?.message || String(e));
+      } finally {
+        setBusy(false);
+      }
+    }
+    run();
+  }, [file]);
 
   const counts = useMemo(() => {
     const all = [...parsed, ...dbRows];
@@ -52,20 +99,41 @@ export default function Page() {
   async function onParseClick() {
     setError('');
     setToast('');
-    if (!file) return;
+
+    if (!sheet?.rows?.length) {
+      setError('Bitte zuerst eine Datei auswählen.');
+      return;
+    }
+
+    if (mapping.customer_number === -1 && mapping.name === -1) {
+      setError('Bitte mindestens Kundennummer oder Kunde/Name zuordnen.');
+      return;
+    }
+
     setBusy(true);
     try {
-      const rows = await parseDealerRowsFromFile(file, countryCode);
+      const rows = parseDealerRowsFromSheet({
+        rows: sheet.rows,
+        hasHeader: sheet.hasHeader,
+        mapping,
+        countryCode
+      });
+
       setParsed(prev => {
-        // merge, dedupe by (country_code + customer_number)
         const map = new Map();
         for (const r of [...prev, ...rows]) {
-          const key = `${r.country_code}::${r.customer_number}`;
+          const key = `${r.country_code}::${r.customer_number || ''}::${r.name || ''}`;
           map.set(key, r);
         }
         return Array.from(map.values());
       });
-      setToast(`Geparst: ${fmt(rows.length)} Zeilen (${countryCode}).`);
+
+      const missingCn = rows.filter(r => !r.customer_number).length;
+      setToast(
+        missingCn
+          ? `Geparst: ${fmt(rows.length)} Zeilen (${countryCode}). Hinweis: ${fmt(missingCn)} ohne Kundennummer (werden nicht in DB importiert).`
+          : `Geparst: ${fmt(rows.length)} Zeilen (${countryCode}).`
+      );
     } catch (e) {
       setError(e?.message || String(e));
     } finally {
@@ -76,16 +144,24 @@ export default function Page() {
   async function importToDb() {
     setError('');
     setToast('');
+
     if (!parsed.length) {
       setError('Es gibt noch keine geparsten Daten zum Importieren.');
       return;
     }
+
+    const importable = parsed.filter(r => r.customer_number);
+    if (!importable.length) {
+      setError('Keine importierbaren Zeilen (Kundennummer fehlt). Prüfe das Mapping.');
+      return;
+    }
+
     setBusy(true);
     try {
       const res = await fetch('/api/dealers/import', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ rows: parsed })
+        body: JSON.stringify({ rows: importable })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Import fehlgeschlagen');
@@ -128,13 +204,13 @@ export default function Page() {
       <div className="header">
         <div>
           <h1 className="h1">SalesApp – Händler Import</h1>
-          <p className="sub">Upload deiner Flyer-Händlerlisten (DE/AT/CH), automatisches Trennen von Kundennr./Name und Straße/Hausnummer, Import nach Supabase, Ansicht & Filter.</p>
+          <p className="sub">Upload deiner Händlerlisten (DE/AT/CH), Spalten frei zuordnen, automatische Trennung Straße/Hausnummer, Import nach Supabase, Ansicht & Filter.</p>
         </div>
       </div>
 
       <div className="grid">
         <div className="card">
-          <h2>1) Datei hochladen & parsen</h2>
+          <h2>1) Datei hochladen</h2>
 
           <div className="row" style={{ marginBottom: 10 }}>
             <div>
@@ -152,10 +228,52 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="row">
-            <button onClick={onParseClick} disabled={busy || !file}>Parsen</button>
-            <button className="secondary" onClick={clearLocal} disabled={busy}>Vorschau leeren</button>
-          </div>
+          <h2>2) Spalten zuordnen</h2>
+          <div className="small">Nach dem Upload werden Spalten erkannt und du kannst per Dropdown festlegen, was was ist (z.B. A=Kundennr, B=Kunde, C=Straße, D=PLZ, E=Ort).</div>
+
+          {sheet ? (
+            <>
+              <div className="row" style={{ marginTop: 10 }}>
+                <MappingSelect label="Kundennummer" columns={sheet.columns} value={mapping.customer_number} onChange={(v) => setMapping(m => ({ ...m, customer_number: v }))} disabled={busy} />
+                <MappingSelect label="Kunde / Name" columns={sheet.columns} value={mapping.name} onChange={(v) => setMapping(m => ({ ...m, name: v }))} disabled={busy} />
+                <MappingSelect label="Straße (mit Nr)" columns={sheet.columns} value={mapping.street} onChange={(v) => setMapping(m => ({ ...m, street: v }))} disabled={busy} />
+                <MappingSelect label="PLZ" columns={sheet.columns} value={mapping.postal_code} onChange={(v) => setMapping(m => ({ ...m, postal_code: v }))} disabled={busy} />
+                <MappingSelect label="Ort" columns={sheet.columns} value={mapping.city} onChange={(v) => setMapping(m => ({ ...m, city: v }))} disabled={busy} />
+              </div>
+
+              <div className="row" style={{ marginTop: 10 }}>
+                <button onClick={onParseClick} disabled={busy}>Parsen</button>
+                <button className="secondary" onClick={clearLocal} disabled={busy}>Vorschau leeren</button>
+              </div>
+
+              <div className="small" style={{ marginTop: 10 }}>
+                Header erkannt: <span className="mono">{sheet.hasHeader ? 'ja' : 'nein'}</span> · Vorschau der ersten Zeilen:
+              </div>
+
+              <div className="tableWrap" style={{ marginTop: 8 }}>
+                <table style={{ minWidth: 700 }}>
+                  <thead>
+                    <tr>
+                      {sheet.columns.slice(0, 10).map(c => (
+                        <th key={c.idx}>{c.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sheet.sampleRows.map((r, i) => (
+                      <tr key={i}>
+                        {r.slice(0, 10).map((cell, j) => (
+                          <td key={j} style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cell}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <div className="small" style={{ marginTop: 10 }}>Wähle eine Datei, um die Spaltenzuordnung zu sehen.</div>
+          )}
 
           <div className="kpis">
             <div className="kpi">Total: <span className="mono">{fmt(counts.total)}</span></div>
@@ -169,8 +287,8 @@ export default function Page() {
 
           <hr style={{ border: 0, borderTop: '1px solid var(--border)', margin: '14px 0' }} />
 
-          <h2>2) In Supabase importieren</h2>
-          <div className="small">Der Import passiert serverseitig über eine API-Route (Service Role Key bleibt geheim). Upsert-Logik per (country_code, customer_number).</div>
+          <h2>3) In Supabase importieren</h2>
+          <div className="small">Import passiert serverseitig (Service Role Key bleibt geheim). Upsert per (country_code, customer_number).</div>
           <div className="row" style={{ marginTop: 10 }}>
             <button onClick={importToDb} disabled={busy || !parsed.length}>In DB importieren</button>
             <button className="secondary" onClick={() => refreshFromDb(filterCountry === 'ALL' ? undefined : filterCountry)} disabled={busy}>Aus DB laden</button>
@@ -178,7 +296,7 @@ export default function Page() {
         </div>
 
         <div className="card">
-          <h2>3) Händler ansehen & filtern</h2>
+          <h2>4) Händler ansehen & filtern</h2>
 
           <div className="row" style={{ marginBottom: 10 }}>
             <div>
