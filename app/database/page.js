@@ -57,19 +57,16 @@ export default function DatabasePage() {
     }
   }
 
-  // Initial load
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reset pagination when filters/sort/page size change
   useEffect(() => {
     setOffset(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country, q, sort, dir, limit]);
 
-  // Reload on any relevant change
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -80,32 +77,12 @@ export default function DatabasePage() {
 
   return (
     <div className="container">
-      <div
-        className="header"
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 12,
-        }}
-      >
+      <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
           <h1 className="h1">Händlerdatenbank</h1>
-          <p className="sub">
-            Alle Händler aus Supabase – mit Suche, Länderfilter und Pagination.
-          </p>
+          <p className="sub">Alle Händler aus Supabase – mit Suche, Länderfilter und Pagination.</p>
         </div>
-
-        <a
-          className="secondary"
-          href="/"
-          style={{
-            textDecoration: 'none',
-            padding: '10px 12px',
-            borderRadius: 10,
-            display: 'inline-block',
-          }}
-        >
+        <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
           ← Import
         </a>
       </div>
@@ -115,11 +92,7 @@ export default function DatabasePage() {
           <div>
             <label>Land</label>
             <br />
-            <select
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              disabled={busy}
-            >
+            <select value={country} onChange={(e) => setCountry(e.target.value)} disabled={busy}>
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>
                   {c.label}
@@ -144,11 +117,7 @@ export default function DatabasePage() {
           <div>
             <label>Sortierung</label>
             <br />
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value)}
-              disabled={busy}
-            >
+            <select value={sort} onChange={(e) => setSort(e.target.value)} disabled={busy}>
               <option value="country_code">Land</option>
               <option value="customer_number">Kundennr</option>
               <option value="name">Name</option>
@@ -170,11 +139,7 @@ export default function DatabasePage() {
           <div>
             <label>Pro Seite</label>
             <br />
-            <select
-              value={String(limit)}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              disabled={busy}
-            >
+            <select value={String(limit)} onChange={(e) => setLimit(Number(e.target.value))} disabled={busy}>
               <option value="50">50</option>
               <option value="100">100</option>
               <option value="200">200</option>
@@ -252,7 +217,6 @@ export default function DatabasePage() {
                   <td>{r.city}</td>
                 </tr>
               ))}
-
               {!rows.length ? (
                 <tr>
                   <td colSpan={7} className="small" style={{ padding: 12 }}>
