@@ -18,7 +18,6 @@ function toBool(v) {
 }
 
 function isValidLocalPart(s) {
-  // buchstaben, ziffern, punkt, underscore, minus
   return /^[a-zA-Z0-9._-]+$/.test(s);
 }
 
@@ -28,13 +27,12 @@ function normalizeRangeValue(v) {
 
 function validateRangesClient(ranges) {
   const parsed = [];
-
   for (const r of ranges) {
     const fromRaw = normalizeRangeValue(r?.from);
     const toRaw = normalizeRangeValue(r?.to);
 
     if (!fromRaw && !toRaw) continue; // empty row ok
-    if (!fromRaw || !toRaw) throw new Error('Jede Range braucht "von" und "bis".');
+    if (!fromRaw || !toRaw) throw new Error('Jede Range braucht „von“ und „bis“.');
 
     if (!/^\d+$/.test(fromRaw) || !/^\d+$/.test(toRaw)) {
       throw new Error(`Ungültige Range "${fromRaw}-${toRaw}" (nur Ziffern).`);
@@ -42,6 +40,7 @@ function validateRangesClient(ranges) {
     if (fromRaw.length !== toRaw.length) {
       throw new Error(`Ungültige Range "${fromRaw}-${toRaw}" (von/bis müssen gleich viele Stellen haben).`);
     }
+
     const prefixLen = fromRaw.length;
     if (prefixLen < 2 || prefixLen > 5) {
       throw new Error(`Ungültige Range "${fromRaw}-${toRaw}" (Prefix-Länge 2–5).`);
@@ -54,7 +53,7 @@ function validateRangesClient(ranges) {
     parsed.push({ prefixLen, from, to });
   }
 
-  // overlap check per prefixLen
+  // overlap check per prefixLen (client side)
   parsed.sort((a, b) => a.prefixLen - b.prefixLen || a.from - b.from);
   for (let i = 1; i < parsed.length; i++) {
     const prev = parsed[i - 1];
@@ -65,6 +64,11 @@ function validateRangesClient(ranges) {
   }
 
   return parsed;
+}
+
+function formatPrefix(n, len) {
+  const s = String(n ?? '');
+  return len ? s.padStart(len, '0') : s;
 }
 
 export default function UsersPage() {
@@ -91,9 +95,14 @@ export default function UsersPage() {
   const [country, setCountry] = useState('DE');
   const [territories, setTerritories] = useState([{ from: '', to: '' }]);
 
+  // UX
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // search/filter in UI (client-side)
+  const [userSearch, setUserSearch] = useState('');
+  const [showOnlyAD, setShowOnlyAD] = useState(false);
 
   const selectedGroup = useMemo(() => groups.find((g) => g.id === groupId) || null, [groups, groupId]);
   const isAD = useMemo(() => (selectedGroup?.name || '').toLowerCase() === 'aussendienst', [selectedGroup]);
@@ -103,6 +112,23 @@ export default function UsersPage() {
     if (!l) return '';
     return l.includes('@') ? l : `${l}${DOMAIN}`;
   }, [localPart]);
+
+  const filteredUsers = useMemo(() => {
+    const s = userSearch.trim().toLowerCase();
+    return (users || []).filter((u) => {
+      if (showOnlyAD) {
+        const gname = (u.group?.name || '').toLowerCase();
+        if (gname !== 'aussendienst') return false;
+      }
+      if (!s) return true;
+      return (
+        String(u.email || '').toLowerCase().includes(s) ||
+        String(u.display_name || '').toLowerCase().includes(s) ||
+        String(u.group?.name || '').toLowerCase().includes(s) ||
+        String(u.country_code || '').toLowerCase().includes(s)
+      );
+    });
+  }, [users, userSearch, showOnlyAD]);
 
   async function loadGroups() {
     setGroupsBusy(true);
@@ -157,7 +183,11 @@ export default function UsersPage() {
       const res = await fetch('/api/groups/update', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ id: group.id, name: group.name, permissions: group.permissions || {} }),
+        body: JSON.stringify({
+          id: group.id,
+          name: group.name,
+          permissions: group.permissions || {},
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Speichern fehlgeschlagen');
@@ -174,10 +204,7 @@ export default function UsersPage() {
     setToast('');
     setError('');
     const name = newGroupName.trim();
-    if (!name) {
-      setError('Gruppenname fehlt');
-      return;
-    }
+    if (!name) return setError('Gruppenname fehlt');
 
     setBusy(true);
     try {
@@ -188,6 +215,7 @@ export default function UsersPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || 'Gruppe anlegen fehlgeschlagen');
+
       setToast(`Gruppe angelegt: ${data.group.name}`);
       setNewGroupName('');
       setNewGroupPerms(PERM_KEYS.reduce((acc, p) => ({ ...acc, [p.key]: false }), {}));
@@ -214,347 +242,3 @@ export default function UsersPage() {
   async function createUser() {
     setToast('');
     setError('');
-
-    const local = localPart.trim();
-    if (!local) return setError('Bitte Benutzername (Teil vor @) eingeben.');
-    if (local.includes('@')) return setError('Bitte nur den Teil vor dem @ eingeben.');
-    if (!isValidLocalPart(local)) return setError('Ungültig: nur a-z, 0-9, . _ -');
-
-    if (!groupId) return setError('Bitte eine Gruppe auswählen.');
-
-    if (isAD) {
-      if (!COUNTRIES.includes(country)) return setError('Aussendienst braucht ein Land (DE/AT/CH).');
-
-      // client validation
-      try {
-        const parsed = validateRangesClient(territories);
-        if (!parsed.length) return setError('Aussendienst braucht mindestens ein Gebiet (von–bis).');
-      } catch (e) {
-        return setError(e?.message || String(e));
-      }
-    }
-
-    setBusy(true);
-    try {
-      const res = await fetch('/api/users/create', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          local_part: local,
-          display_name: displayName.trim() || null,
-          group_id: groupId,
-          country_code: isAD ? country : null,
-          territories: isAD ? territories : [],
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'User anlegen fehlgeschlagen');
-
-      setToast(`User angelegt & eingeladen: ${data.email}`);
-      setLocalPart('');
-      setDisplayName('');
-      setTerritories([{ from: '', to: '' }]);
-      await loadUsers();
-    } catch (e) {
-      setError(e?.message || String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="container">
-      <div
-        className="header"
-        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}
-      >
-        <div>
-          <h1 className="h1">Benutzer & Rollen</h1>
-          <p className="sub">
-            Benutzer anlegen (immer {DOMAIN}), Gruppen/Rechte verwalten, Außendienst mit Land + PLZ-Prefix-Gebieten.
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <a
-            className="secondary"
-            href="/"
-            style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}
-          >
-            ← Import
-          </a>
-          <a
-            className="secondary"
-            href="/database"
-            style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}
-          >
-            Datenbank →
-          </a>
-        </div>
-      </div>
-
-      <div className="grid">
-        {/* USER CREATE */}
-        <div className="card">
-          <h2>Benutzer anlegen</h2>
-
-          <div className="row" style={{ marginBottom: 10 }}>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <label>Benutzername (vor dem @)</label>
-              <br />
-              <input
-                value={localPart}
-                onChange={(e) => setLocalPart(e.target.value)}
-                placeholder="z.B. max.mustermann"
-                disabled={busy}
-                style={{ width: '100%' }}
-              />
-              <div className="small" style={{ marginTop: 6 }}>
-                E-Mail: <span className="mono">{emailPreview || '—'}</span>
-              </div>
-            </div>
-
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <label>Anzeigename (optional)</label>
-              <br />
-              <input
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="z.B. Max Mustermann"
-                disabled={busy}
-                style={{ width: '100%' }}
-              />
-            </div>
-          </div>
-
-          <div className="row" style={{ marginBottom: 10 }}>
-            <div style={{ minWidth: 220 }}>
-              <label>Gruppe</label>
-              <br />
-              <select value={groupId} onChange={(e) => setGroupId(e.target.value)} disabled={busy || groupsBusy}>
-                {(groups || []).map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {isAD ? (
-              <div style={{ minWidth: 220 }}>
-                <label>Land (Aussendienst Pflicht)</label>
-                <br />
-                <select value={country} onChange={(e) => setCountry(e.target.value)} disabled={busy}>
-                  {COUNTRIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : null}
-          </div>
-
-          {isAD ? (
-            <>
-              <h3 style={{ marginTop: 10 }}>Gebiete (PLZ-Prefix von–bis)</h3>
-              <div className="small" style={{ marginBottom: 8 }}>
-                Beispiele: <span className="mono">50–59</span> oder <span className="mono">60–69</span>. Mehrere Ranges
-                sind möglich. Ranges dürfen sich nicht überlappen.
-              </div>
-
-              {territories.map((r, idx) => (
-                <div key={idx} className="row" style={{ marginBottom: 8 }}>
-                  <div style={{ minWidth: 120 }}>
-                    <label>von</label>
-                    <br />
-                    <input
-                      value={r.from}
-                      onChange={(e) => setTerritory(idx, 'from', e.target.value)}
-                      placeholder="z.B. 50"
-                      disabled={busy}
-                    />
-                  </div>
-                  <div style={{ minWidth: 120 }}>
-                    <label>bis</label>
-                    <br />
-                    <input
-                      value={r.to}
-                      onChange={(e) => setTerritory(idx, 'to', e.target.value)}
-                      placeholder="z.B. 59"
-                      disabled={busy}
-                    />
-                  </div>
-
-                  <button
-                    className="secondary"
-                    onClick={() => removeTerritoryRow(idx)}
-                    disabled={busy || territories.length <= 1}
-                  >
-                    Entfernen
-                  </button>
-                </div>
-              ))}
-
-              <button className="secondary" onClick={addTerritoryRow} disabled={busy}>
-                + Range hinzufügen
-              </button>
-            </>
-          ) : null}
-
-          <div className="row" style={{ marginTop: 12 }}>
-            <button onClick={createUser} disabled={busy}>
-              Benutzer anlegen & einladen
-            </button>
-            <button className="secondary" onClick={loadUsers} disabled={busy || usersBusy}>
-              Benutzer neu laden
-            </button>
-          </div>
-
-          {toast ? <div className="toast">{toast}</div> : null}
-          {error ? <div className="error">{error}</div> : null}
-        </div>
-
-        {/* GROUPS */}
-        <div className="card">
-          <h2>Benutzergruppen & Rechte</h2>
-
-          {groupsError ? <div className="error">{groupsError}</div> : null}
-
-          <div className="row" style={{ marginBottom: 12, alignItems: 'end' }}>
-            <div style={{ flex: 1, minWidth: 240 }}>
-              <label>Neue Gruppe</label>
-              <br />
-              <input
-                value={newGroupName}
-                onChange={(e) => setNewGroupName(e.target.value)}
-                placeholder="z.B. Innendienst"
-                disabled={busy}
-                style={{ width: '100%' }}
-              />
-              <div className="small" style={{ marginTop: 6 }}>
-                Beispiel JSON (nur zur Info):{' '}
-                <span className="mono">{'{"manage_users": true, "view_database": true}'}</span>
-              </div>
-            </div>
-
-            <button onClick={createGroup} disabled={busy}>
-              Gruppe anlegen
-            </button>
-            <button className="secondary" onClick={loadGroups} disabled={busy || groupsBusy}>
-              Neu laden
-            </button>
-          </div>
-
-          <div className="small" style={{ marginBottom: 8 }}>
-            Rechte für neue Gruppe:
-          </div>
-          <div className="row" style={{ flexWrap: 'wrap', gap: 14, marginBottom: 14 }}>
-            {PERM_KEYS.map((p) => (
-              <label key={p.key} className="small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <input
-                  type="checkbox"
-                  checked={toBool(newGroupPerms[p.key])}
-                  onChange={(e) => setNewGroupPerms((s) => ({ ...s, [p.key]: e.target.checked }))}
-                  disabled={busy}
-                />
-                {p.label}
-              </label>
-            ))}
-          </div>
-
-          <div className="tableWrap">
-            <table style={{ minWidth: 760 }}>
-              <thead>
-                <tr>
-                  <th>Gruppe</th>
-                  {PERM_KEYS.map((p) => (
-                    <th key={p.key}>{p.label}</th>
-                  ))}
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map((g) => (
-                  <tr key={g.id}>
-                    <td className="mono">{g.name}</td>
-                    {PERM_KEYS.map((p) => (
-                      <td key={p.key} style={{ textAlign: 'center' }}>
-                        <input
-                          type="checkbox"
-                          checked={toBool(g.permissions?.[p.key])}
-                          onChange={(e) => updateExistingGroupPerm(g, p.key, e.target.checked)}
-                          disabled={busy}
-                        />
-                      </td>
-                    ))}
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="secondary" onClick={() => saveGroup(g)} disabled={busy}>
-                        Speichern
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {!groups.length ? (
-                  <tr>
-                    <td colSpan={PERM_KEYS.length + 2} className="small" style={{ padding: 12 }}>
-                      Keine Gruppen gefunden.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* USERS LIST */}
-        <div className="card">
-          <h2>Benutzer (Übersicht)</h2>
-
-          {usersError ? <div className="error">{usersError}</div> : null}
-
-          <div className="small" style={{ marginBottom: 8 }}>
-            Geladen: <span className="mono">{users.length}</span> {usersBusy ? '· Lädt…' : ''}
-          </div>
-
-          <div className="tableWrap">
-            <table style={{ minWidth: 880 }}>
-              <thead>
-                <tr>
-                  <th>E-Mail</th>
-                  <th>Name</th>
-                  <th>Gruppe</th>
-                  <th>Land</th>
-                  <th>Gebiete</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.user_id}>
-                    <td className="mono">{u.email}</td>
-                    <td>{u.display_name || ''}</td>
-                    <td className="mono">{u.group?.name || ''}</td>
-                    <td className="mono">{u.country_code || ''}</td>
-                    <td className="mono">
-                      {(u.territories || [])
-                        .sort((a, b) => a.prefix_len - b.prefix_len || a.from_prefix - b.from_prefix)
-                        .map((t) => `${t.from_prefix}-${t.to_prefix}`)
-                        .join(', ')}
-                    </td>
-                  </tr>
-                ))}
-                {!users.length ? (
-                  <tr>
-                    <td colSpan={5} className="small" style={{ padding: 12 }}>
-                      Noch keine Benutzer.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
