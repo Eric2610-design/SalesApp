@@ -3,55 +3,37 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const COUNTRIES = [
-  { code: 'ALL', label: 'Alle' },
-  { code: 'DE', label: 'DE' },
-  { code: 'AT', label: 'AT' },
-  { code: 'CH', label: 'CH' },
+  { value: '', label: 'Alle Länder' },
+  { value: 'DE', label: 'DE' },
+  { value: 'AT', label: 'AT' },
+  { value: 'CH', label: 'CH' },
 ];
 
-function fmt(n) {
-  return new Intl.NumberFormat('de-CH').format(n);
-}
-
 export default function DatabasePage() {
-  const [country, setCountry] = useState('ALL');
+  const [country, setCountry] = useState('');
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState('country_code');
-  const [dir, setDir] = useState('asc');
-  const [limit, setLimit] = useState(200);
-  const [offset, setOffset] = useState(0);
-
-  const [rows, setRows] = useState([]);
-  const [count, setCount] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-
-  const page = useMemo(() => Math.floor(offset / limit) + 1, [offset, limit]);
-  const totalPages = useMemo(() => {
-    if (count == null) return null;
-    return Math.max(1, Math.ceil(count / limit));
-  }, [count, limit]);
+  const [rows, setRows] = useState([]);
+  const [count, setCount] = useState(0);
+  const [msg, setMsg] = useState(null);
 
   async function load() {
     setBusy(true);
-    setError('');
+    setMsg(null);
     try {
       const url = new URL('/api/dealers/list', window.location.origin);
-      if (country !== 'ALL') url.searchParams.set('country', country);
+      if (country) url.searchParams.set('country', country);
       if (q.trim()) url.searchParams.set('q', q.trim());
-      url.searchParams.set('sort', sort);
-      url.searchParams.set('dir', dir);
-      url.searchParams.set('limit', String(limit));
-      url.searchParams.set('offset', String(offset));
+      url.searchParams.set('limit', '1000');
 
-      const res = await fetch(url.toString(), { method: 'GET' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Konnte Daten nicht laden');
+      const res = await fetch(url.toString());
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || 'Fehler beim Laden');
 
-      setRows(data.rows || []);
-      setCount(typeof data.count === 'number' ? data.count : null);
+      setRows(json.dealers || []);
+      setCount(json.count || 0);
     } catch (e) {
-      setError(e?.message || String(e));
+      setMsg({ type: 'error', text: e?.message || String(e) });
     } finally {
       setBusy(false);
     }
@@ -62,172 +44,95 @@ export default function DatabasePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    setOffset(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country, q, sort, dir, limit]);
+  const filtered = useMemo(() => rows, [rows]);
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country, q, sort, dir, limit, offset]);
-
-  const from = count == null ? null : Math.min(offset + 1, count);
-  const to = count == null ? null : Math.min(offset + rows.length, count);
+  async function clearAll() {
+    if (!confirm('Wirklich ALLE Händler löschen?')) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/dealers/clear', { method: 'POST' });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || 'Löschen fehlgeschlagen');
+      await load();
+      setMsg({ type: 'success', text: 'Datenbank geleert.' });
+    } catch (e) {
+      setMsg({ type: 'error', text: e?.message || String(e) });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="container">
-      <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+    <main className="card">
+      <h1>Datenbank</h1>
+
+      <div className="row">
         <div>
-          <h1 className="h1">Händlerdatenbank</h1>
-          <p className="sub">Alle Händler aus Supabase – mit Suche, Länderfilter und Pagination.</p>
+          <label>Land</label>
+          <select value={country} onChange={(e) => setCountry(e.target.value)}>
+            {COUNTRIES.map((c) => (
+              <option key={c.value} value={c.value}>
+                {c.label}
+              </option>
+            ))}
+          </select>
         </div>
-        <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
-          ← Import
-        </a>
+        <div>
+          <label>Suche (Nr, Name, Ort)</label>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="z.B. 60, München, Bike…" />
+        </div>
       </div>
 
-      <div className="card">
-        <div className="row" style={{ marginBottom: 12, alignItems: 'end' }}>
-          <div>
-            <label>Land</label>
-            <br />
-            <select value={country} onChange={(e) => setCountry(e.target.value)} disabled={busy}>
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-          </div>
+      <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+        <button className="primary" disabled={busy} onClick={load}>{busy ? 'Lade…' : 'Aktualisieren'}</button>
+        <button className="danger" disabled={busy} onClick={clearAll}>Alles löschen</button>
+        <a className="secondary" href="/">← Import</a>
+      </div>
 
-          <div style={{ flex: 1, minWidth: 240 }}>
-            <label>Suche</label>
-            <br />
-            <input
-              type="text"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Kundennr, Name, Ort, Straße …"
-              disabled={busy}
-              style={{ width: '100%' }}
-            />
-          </div>
+      {msg?.text && (
+        <p className={msg.type === 'error' ? 'error' : 'success'} style={{ marginTop: 12 }}>
+          {msg.text}
+        </p>
+      )}
 
-          <div>
-            <label>Sortierung</label>
-            <br />
-            <select value={sort} onChange={(e) => setSort(e.target.value)} disabled={busy}>
-              <option value="country_code">Land</option>
-              <option value="customer_number">Kundennr</option>
-              <option value="name">Name</option>
-              <option value="postal_code">PLZ</option>
-              <option value="city">Ort</option>
-              <option value="created_at">Erstellt</option>
-            </select>
-          </div>
+      <div className="hr" />
+      <div className="kpi">
+        <span className="badge">Treffer: <b>{filtered.length}</b></span>
+        <span className="badge">Count (Server): <b>{count}</b></span>
+      </div>
 
-          <div>
-            <label>Richtung</label>
-            <br />
-            <select value={dir} onChange={(e) => setDir(e.target.value)} disabled={busy}>
-              <option value="asc">↑ asc</option>
-              <option value="desc">↓ desc</option>
-            </select>
-          </div>
-
-          <div>
-            <label>Pro Seite</label>
-            <br />
-            <select value={String(limit)} onChange={(e) => setLimit(Number(e.target.value))} disabled={busy}>
-              <option value="50">50</option>
-              <option value="100">100</option>
-              <option value="200">200</option>
-              <option value="500">500</option>
-            </select>
-          </div>
-
-          <button onClick={load} disabled={busy}>
-            Neu laden
-          </button>
-        </div>
-
-        {error ? <div className="error">{error}</div> : null}
-
-        <div className="small" style={{ marginBottom: 10 }}>
-          {count == null ? (
-            <>
-              Geladen: <span className="mono">{fmt(rows.length)}</span>
-            </>
-          ) : (
-            <>
-              Anzeige: <span className="mono">{fmt(from)}</span>–<span className="mono">{fmt(to)}</span> von{' '}
-              <span className="mono">{fmt(count)}</span> (Seite <span className="mono">{fmt(page)}</span>
-              {totalPages ? (
-                <>
-                  {' '}
-                  / <span className="mono">{fmt(totalPages)}</span>
-                </>
-              ) : null}
-              )
-            </>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Land</th>
+            <th>Kundennr.</th>
+            <th>Name</th>
+            <th>Straße</th>
+            <th>Nr.</th>
+            <th>PLZ</th>
+            <th>Ort</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filtered.map((d) => (
+            <tr key={d.id}>
+              <td>{d.country_code}</td>
+              <td>{d.customer_number}</td>
+              <td>{d.name}</td>
+              <td>{d.street}</td>
+              <td>{d.house_number}</td>
+              <td>{d.postal_code}</td>
+              <td>{d.city}</td>
+            </tr>
+          ))}
+          {!filtered.length && (
+            <tr>
+              <td colSpan={7} className="muted">Keine Daten.</td>
+            </tr>
           )}
-          {busy ? <> · Lädt…</> : null}
-        </div>
-
-        <div className="row" style={{ marginBottom: 10 }}>
-          <button
-            className="secondary"
-            onClick={() => setOffset((o) => Math.max(0, o - limit))}
-            disabled={busy || offset === 0}
-          >
-            ← Zurück
-          </button>
-          <button
-            className="secondary"
-            onClick={() => setOffset((o) => o + limit)}
-            disabled={busy || (count != null && offset + limit >= count)}
-          >
-            Weiter →
-          </button>
-        </div>
-
-        <div className="tableWrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Land</th>
-                <th>Kundennr</th>
-                <th>Name</th>
-                <th>Straße</th>
-                <th>Nr</th>
-                <th>PLZ</th>
-                <th>Ort</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
-                <tr key={`${r.country_code}-${r.customer_number}-${idx}`}>
-                  <td className="mono">{r.country_code}</td>
-                  <td className="mono">{r.customer_number}</td>
-                  <td>{r.name}</td>
-                  <td>{r.street}</td>
-                  <td className="mono">{r.house_number}</td>
-                  <td className="mono">{r.postal_code}</td>
-                  <td>{r.city}</td>
-                </tr>
-              ))}
-              {!rows.length ? (
-                <tr>
-                  <td colSpan={7} className="small" style={{ padding: 12 }}>
-                    Keine Treffer.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+        </tbody>
+      </table>
+    </main>
   );
 }
