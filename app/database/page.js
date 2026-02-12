@@ -57,13 +57,19 @@ export default function DatabasePage() {
     }
   }
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, []);
+  // Initial load
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // Reset pagination when filters/sort/page size change
   useEffect(() => {
     setOffset(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country, q, sort, dir, limit]);
 
+  // Reload on any relevant change
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -74,12 +80,32 @@ export default function DatabasePage() {
 
   return (
     <div className="container">
-      <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <div
+        className="header"
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 12,
+        }}
+      >
         <div>
           <h1 className="h1">Händlerdatenbank</h1>
-          <p className="sub">Alle Händler aus Supabase – mit Suche, Länderfilter und Pagination.</p>
+          <p className="sub">
+            Alle Händler aus Supabase – mit Suche, Länderfilter und Pagination.
+          </p>
         </div>
-        <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
+
+        <a
+          className="secondary"
+          href="/"
+          style={{
+            textDecoration: 'none',
+            padding: '10px 12px',
+            borderRadius: 10,
+            display: 'inline-block',
+          }}
+        >
           ← Import
         </a>
       </div>
@@ -87,14 +113,24 @@ export default function DatabasePage() {
       <div className="card">
         <div className="row" style={{ marginBottom: 12, alignItems: 'end' }}>
           <div>
-            <label>Land</label><br />
-            <select value={country} onChange={(e) => setCountry(e.target.value)} disabled={busy}>
-              {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.label}</option>)}
+            <label>Land</label>
+            <br />
+            <select
+              value={country}
+              onChange={(e) => setCountry(e.target.value)}
+              disabled={busy}
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
             </select>
           </div>
 
           <div style={{ flex: 1, minWidth: 240 }}>
-            <label>Suche</label><br />
+            <label>Suche</label>
+            <br />
             <input
               type="text"
               value={q}
@@ -106,8 +142,13 @@ export default function DatabasePage() {
           </div>
 
           <div>
-            <label>Sortierung</label><br />
-            <select value={sort} onChange={(e) => setSort(e.target.value)} disabled={busy}>
+            <label>Sortierung</label>
+            <br />
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value)}
+              disabled={busy}
+            >
               <option value="country_code">Land</option>
               <option value="customer_number">Kundennr</option>
               <option value="name">Name</option>
@@ -118,7 +159,8 @@ export default function DatabasePage() {
           </div>
 
           <div>
-            <label>Richtung</label><br />
+            <label>Richtung</label>
+            <br />
             <select value={dir} onChange={(e) => setDir(e.target.value)} disabled={busy}>
               <option value="asc">↑ asc</option>
               <option value="desc">↓ desc</option>
@@ -126,8 +168,13 @@ export default function DatabasePage() {
           </div>
 
           <div>
-            <label>Pro Seite</label><br />
-            <select value={String(limit)} onChange={(e) => setLimit(Number(e.target.value))} disabled={busy}>
+            <label>Pro Seite</label>
+            <br />
+            <select
+              value={String(limit)}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              disabled={busy}
+            >
               <option value="50">50</option>
               <option value="100">100</option>
               <option value="200">200</option>
@@ -135,25 +182,47 @@ export default function DatabasePage() {
             </select>
           </div>
 
-          <button onClick={load} disabled={busy}>Neu laden</button>
+          <button onClick={load} disabled={busy}>
+            Neu laden
+          </button>
         </div>
 
         {error ? <div className="error">{error}</div> : null}
 
         <div className="small" style={{ marginBottom: 10 }}>
           {count == null ? (
-            <>Geladen: <span className="mono">{fmt(rows.length)}</span></>
+            <>
+              Geladen: <span className="mono">{fmt(rows.length)}</span>
+            </>
           ) : (
-            <>Anzeige: <span className="mono">{fmt(from)}</span>–<span className="mono">{fmt(to)}</span> von <span className="mono">{fmt(count)}</span> (Seite <span className="mono">{fmt(page)}</span>{totalPages ? <> / <span className="mono">{fmt(totalPages)}</span></> : null})</>
+            <>
+              Anzeige: <span className="mono">{fmt(from)}</span>–<span className="mono">{fmt(to)}</span> von{' '}
+              <span className="mono">{fmt(count)}</span> (Seite <span className="mono">{fmt(page)}</span>
+              {totalPages ? (
+                <>
+                  {' '}
+                  / <span className="mono">{fmt(totalPages)}</span>
+                </>
+              ) : null}
+              )
+            </>
           )}
           {busy ? <> · Lädt…</> : null}
         </div>
 
         <div className="row" style={{ marginBottom: 10 }}>
-          <button className="secondary" onClick={() => setOffset(o => Math.max(0, o - limit))} disabled={busy || offset === 0}>
+          <button
+            className="secondary"
+            onClick={() => setOffset((o) => Math.max(0, o - limit))}
+            disabled={busy || offset === 0}
+          >
             ← Zurück
           </button>
-          <button className="secondary" onClick={() => setOffset(o => o + limit)} disabled={busy || (count != null && offset + limit >= count)}>
+          <button
+            className="secondary"
+            onClick={() => setOffset((o) => o + limit)}
+            disabled={busy || (count != null && offset + limit >= count)}
+          >
             Weiter →
           </button>
         </div>
@@ -183,8 +252,13 @@ export default function DatabasePage() {
                   <td>{r.city}</td>
                 </tr>
               ))}
+
               {!rows.length ? (
-                <tr><td colSpan={7} className="small" style={{ padding: 12 }}>Keine Treffer.</td></tr>
+                <tr>
+                  <td colSpan={7} className="small" style={{ padding: 12 }}>
+                    Keine Treffer.
+                  </td>
+                </tr>
               ) : null}
             </tbody>
           </table>
