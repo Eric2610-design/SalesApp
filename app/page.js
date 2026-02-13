@@ -11,6 +11,54 @@ function guessDelimiter(text) {
   return ',';
 }
 
+function detectCountryFromFilename(fileName) {
+  const name = String(fileName || '').toLowerCase();
+  const base = name.replace(/\.[^/.]+$/, ''); // remove extension
+  const tokens = base.split(/[^a-z0-9]+/).filter(Boolean);
+
+  const hasToken = (arr) => tokens.some((t) => arr.includes(t));
+
+  if (hasToken(['ch', 'che', 'schweiz', 'switzerland'])) return 'CH';
+  if (hasToken(['at', 'aut', 'austria', 'oesterreich', 'osterreich', 'österreich'])) return 'AT';
+  if (hasToken(['de', 'deu', 'deutschland', 'germany'])) return 'DE';
+
+  // suffix-based hints (covers e.g. "FlyerDE.xlsx" => "flyerde" endsWith "de")
+  if (base.endsWith('ch')) return 'CH';
+  if (base.endsWith('at')) return 'AT';
+  if (base.endsWith('de')) return 'DE';
+
+  return null;
+}
+
+function detectCountryFromContent(aoa) {
+  const sample = (aoa || []).slice(0, 30);
+  const flat = sample.flat().map((x) => String(x ?? ''));
+  const text = flat.join(' ').toLowerCase();
+
+  if (text.includes('schweiz') || text.includes('switzerland')) return 'CH';
+  if (text.includes('österreich') || text.includes('oesterreich') || text.includes('austria')) return 'AT';
+  if (text.includes('deutschland') || text.includes('germany')) return 'DE';
+
+  // heuristic: CH uses 4-digit postal codes often; DE/AT mostly 5-digit
+  let count4 = 0;
+  let count5 = 0;
+  for (const cell of flat) {
+    const ms = cell.match(/\b\d{4,5}\b/g);
+    if (!ms) continue;
+    for (const n of ms) {
+      if (n.length === 4) count4++;
+      if (n.length === 5) count5++;
+    }
+  }
+  if (count4 >= 10 && count4 > count5 * 1.5) return 'CH';
+
+  return null;
+}
+
+function detectCountry(fileName, aoa) {
+  return detectCountryFromFilename(fileName) || detectCountryFromContent(aoa) || null;
+}
+
 function toAoaFromFile(file) {
   return new Promise((resolve, reject) => {
     const name = (file?.name || '').toLowerCase();
@@ -92,7 +140,15 @@ export default function Home() {
       const rows = await toAoaFromFile(f);
       const cleaned = (rows || []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? '').trim() !== ''));
       setAoa(cleaned);
-      setStatus(`Geladen: ${cleaned.length} Zeilen`);
+
+      const detected = detectCountry(f.name, cleaned);
+      if (detected && COUNTRIES.includes(detected)) {
+        setCountry(detected);
+        setToast(`Land automatisch erkannt: ${detected}`);
+        setStatus(`Geladen: ${cleaned.length} Zeilen · Land: ${detected}`);
+      } else {
+        setStatus(`Geladen: ${cleaned.length} Zeilen`);
+      }
     } catch (e) {
       setError(e?.message || String(e));
       setAoa([]);
@@ -215,7 +271,7 @@ export default function Home() {
 
           <div className="row" style={{ alignItems: 'end' }}>
             <div>
-              <label>Land</label><br/>
+              <label>Land (wird automatisch erkannt)</label><br/>
               <select value={country} onChange={(e) => setCountry(e.target.value)} disabled={busy}>
                 {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
               </select>
