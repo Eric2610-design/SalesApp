@@ -18,7 +18,8 @@ function parseRanges(inputRanges) {
     const fromRaw = String(r?.from ?? '').trim();
     const toRaw = String(r?.to ?? '').trim();
 
-    if (!fromRaw || !toRaw) continue;
+    if (!fromRaw && !toRaw) continue;
+    if (!fromRaw || !toRaw) throw new Error('Jede Range braucht "von" und "bis".');
 
     if (!/^\d+$/.test(fromRaw) || !/^\d+$/.test(toRaw)) {
       throw new Error(`Range "${fromRaw}-${toRaw}" ist ungültig (nur Ziffern).`);
@@ -34,10 +35,6 @@ function parseRanges(inputRanges) {
 
     const from_prefix = Number.parseInt(fromRaw, 10);
     const to_prefix = Number.parseInt(toRaw, 10);
-
-    if (!Number.isFinite(from_prefix) || !Number.isFinite(to_prefix)) {
-      throw new Error(`Range "${fromRaw}-${toRaw}" ist ungültig.`);
-    }
     if (from_prefix > to_prefix) {
       throw new Error(`Range "${fromRaw}-${toRaw}" ist ungültig (von > bis).`);
     }
@@ -69,16 +66,14 @@ export async function POST(req) {
     if (!local) return Response.json({ error: 'E-Mail (Local-Part) fehlt' }, { status: 400 });
     if (local.includes('@')) return Response.json({ error: 'Bitte nur den Teil vor dem @ eingeben' }, { status: 400 });
     if (!isValidLocalPart(local)) return Response.json({ error: 'Ungültiger Benutzername (nur a-z, 0-9, . _ -)' }, { status: 400 });
-
     if (!group_id) return Response.json({ error: 'Gruppe fehlt' }, { status: 400 });
 
     const email = `${local}@${DOMAIN}`.toLowerCase();
-
     const supabase = getSupabaseAdmin();
 
     const { data: group, error: gErr } = await supabase
       .from('user_groups')
-      .select('id,name,permissions')
+      .select('id,name')
       .eq('id', group_id)
       .single();
 
@@ -98,6 +93,7 @@ export async function POST(req) {
       }
     }
 
+    // Invite user (Supabase Auth)
     const { data: invited, error: inviteErr } = await supabase.auth.admin.inviteUserByEmail(email);
     if (inviteErr) return Response.json({ error: inviteErr.message }, { status: 500 });
 

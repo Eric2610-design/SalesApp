@@ -7,14 +7,11 @@ export async function POST(req) {
   try {
     const body = await req.json();
     const id = String(body?.id ?? '').trim();
-    const name = body?.name != null ? String(body.name).trim() : null;
-    const permissions = body?.permissions ?? null;
-
     if (!id) return Response.json({ error: 'Group-ID fehlt' }, { status: 400 });
 
     const patch = {};
-    if (name !== null) patch.name = name;
-    if (permissions !== null) patch.permissions = permissions;
+    if (body?.name != null) patch.name = String(body.name).trim();
+    if (body?.permissions != null) patch.permissions = body.permissions;
 
     const supabase = getSupabaseAdmin();
     const { data, error } = await supabase

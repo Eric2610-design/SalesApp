@@ -1,4 +1,4 @@
--- User / Group / Territory schema for SalesApp (Supabase)
+-- Users / Groups / Außendienst-Gebiete
 create extension if not exists btree_gist;
 
 create table if not exists public.user_groups (
