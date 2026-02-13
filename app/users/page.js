@@ -289,6 +289,7 @@ export default function UsersPage() {
       </div>
 
       <div className="grid">
+        {/* USER CREATE */}
         <div className="card">
           <h2>Benutzer anlegen</h2>
 
@@ -371,6 +372,7 @@ export default function UsersPage() {
           {error ? <div className="error">{error}</div> : null}
         </div>
 
+        {/* GROUPS */}
         <div className="card">
           <h2>Benutzergruppen & Rechte</h2>
           {groupsError ? <div className="error">{groupsError}</div> : null}
@@ -430,6 +432,7 @@ export default function UsersPage() {
           </div>
         </div>
 
+        {/* USERS LIST */}
         <div className="card">
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'end', marginBottom: 10 }}>
             <div>
