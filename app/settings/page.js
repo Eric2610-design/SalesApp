@@ -44,9 +44,11 @@ export default function Settings() {
     return () => { alive = false; };
   }, [supabase]);
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    window.location.href = '/';
+  function signOut(e) {
+    e?.preventDefault?.();
+    // Don't await: in some environments signOut can hang on network revocation.
+    try { supabase.auth.signOut(); } catch {}
+    window.location.href = '/login';
   }
 
   const isAdmin = !!me?.isAdmin;
@@ -65,7 +67,7 @@ export default function Settings() {
           <Row href="/users" icon="👤" title="Profil" subtitle={me?.profile?.email || '—'} />
           <div className="sub" style={{ marginTop: 10 }}>Gruppe: <b>{groupName}</b></div>
           <div className="row" style={{ marginTop: 12 }}>
-            <button className="secondary" onClick={signOut} style={{ padding: '10px 12px' }}>Logout</button>
+            <button type="button" className="secondary" onClick={signOut} style={{ padding: '10px 12px' }}>Logout</button>
             <a className="secondary" href="/" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>Homescreen</a>
           </div>
         </div>
