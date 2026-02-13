@@ -285,6 +285,8 @@ export default function UsersPage() {
           <a className="secondary" href="/database" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
             Datenbank →
           </a>
+          <a className="secondary" href="/backlog" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>Auftragsrückstand</a>
+          <a className="secondary" href="/inventory" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>Lagerbestand</a>
         </div>
       </div>
 
@@ -492,9 +494,14 @@ export default function UsersPage() {
                       <td className="mono">{terr}</td>
                       <td style={{ textAlign: 'right' }}>
                         {isUserAD ? (
+                          <div className="row" style={{ justifyContent: 'flex-end' }}>
+                          <a className="secondary" href={`/users/${u.user_id}`} style={{ textDecoration: 'none', padding: '6px 10px', borderRadius: 10, display: 'inline-block' }}>
+                            Übersicht →
+                          </a>
                           <a className="secondary" href={`/users/${u.user_id}/dealers`} style={{ textDecoration: 'none', padding: '6px 10px', borderRadius: 10, display: 'inline-block' }}>
                             Händler →
                           </a>
+                        </div>
                         ) : <span className="small">—</span>}
                       </td>
                     </tr>

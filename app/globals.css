@@ -1,0 +1,77 @@
+:root{
+  --bg:#0b1020;
+  --card:#111a33;
+  --muted:#9fb0d0;
+  --text:#e8eefc;
+  --border:rgba(255,255,255,.10);
+  --accent:#6aa6ff;
+  --danger:#ff6a6a;
+  --ok:#42d392;
+}
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background: radial-gradient(1200px 600px at 20% 0%, #182654 0%, var(--bg) 55%);
+  color:var(--text);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+a{ color: inherit; }
+
+.container{ max-width:1100px; margin:0 auto; padding:28px 16px 80px; }
+.h1{ margin:0; font-size:28px; }
+.sub{ margin:8px 0 0; color:var(--muted); }
+.header{ margin-bottom:18px; }
+
+.grid{ display:grid; gap:14px; grid-template-columns: 1fr; }
+@media(min-width: 980px){ .grid{ grid-template-columns: 1fr 1fr; } }
+
+.card{
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+  border:1px solid var(--border);
+  border-radius:16px;
+  padding:16px;
+  box-shadow: 0 18px 60px rgba(0,0,0,.30);
+}
+
+.row{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+
+label{ color: var(--muted); font-size: 13px; }
+input, select, textarea{
+  background: rgba(0,0,0,.25);
+  border:1px solid var(--border);
+  color: var(--text);
+  padding:10px 12px;
+  border-radius:12px;
+  outline:none;
+  width:auto;
+}
+input::placeholder{ color: rgba(232,238,252,.45); }
+select{ padding:10px 12px; }
+textarea{ width:100%; min-height:110px; }
+
+button{
+  cursor:pointer;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(106,166,255,.18);
+  color: var(--text);
+  padding:10px 12px;
+  border-radius:12px;
+  font-weight:600;
+}
+button:disabled{ opacity:.55; cursor:not-allowed; }
+
+.secondary{ background: rgba(255,255,255,.08); }
+.mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+.small{ font-size: 12px; color: var(--muted); }
+.muted{ color: var(--muted); }
+
+.tableWrap{ overflow:auto; border:1px solid var(--border); border-radius:12px; }
+table{ border-collapse: collapse; width:100%; min-width: 720px; }
+th, td{ padding:10px 10px; border-bottom:1px solid rgba(255,255,255,.08); vertical-align: top; }
+th{ text-align:left; color: var(--muted); font-size:12px; letter-spacing:.02em; }
+
+.toast{ margin-top:12px; padding:10px 12px; border-radius:12px; border:1px solid rgba(66,211,146,.25); background: rgba(66,211,146,.12); }
+.error{ margin-top:12px; padding:10px 12px; border-radius:12px; border:1px solid rgba(255,106,106,.25); background: rgba(255,106,106,.10); }
+
+hr.sep{ border:0; border-top:1px solid rgba(255,255,255,.10); margin:16px 0; }
