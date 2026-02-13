@@ -79,6 +79,7 @@ export default function Settings() {
           <div className="settings-section" style={{ marginTop: 14 }}>
             <div className="settings-header">Admin</div>
             <Row href="/admin/apps" icon="🛠️" title="Apps verwalten" subtitle="Sichtbarkeit & Dock" />
+            <Row href="/admin/installer" icon="📦" title="Installer" subtitle="Pakete installieren" />
             <Row href="/admin" icon="🧨" title="Admin Bereich" subtitle="Tools & Uploads" />
           </div>
         ) : null}

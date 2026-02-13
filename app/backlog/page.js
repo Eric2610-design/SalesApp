@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient } from '../../lib/supabaseClient';
 import { toAoaFromFile } from '../../lib/fileToAoa';
 
 function normalizeHeader(h, idx) {
@@ -9,6 +10,7 @@ function normalizeHeader(h, idx) {
 }
 
 export default function BacklogPage() {
+  const supabase = useMemo(() => getSupabaseClient(), []);
   const [file, setFile] = useState(null);
   const [aoa, setAoa] = useState([]);
   const [hasHeader, setHasHeader] = useState(true);
@@ -20,6 +22,7 @@ export default function BacklogPage() {
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const [current, setCurrent] = useState(null); // current import status
 
@@ -37,6 +40,10 @@ export default function BacklogPage() {
 
   async function loadStatus() {
     try {
+      const sess = (await supabase.auth.getSession()).data.session;
+      const token = sess?.access_token;
+      if (!token) throw new Error('Bitte einloggen');
+
       const res = await fetch('/api/backlog/status');
       const data = await res.json();
       if (res.ok) setCurrent(data);
@@ -56,6 +63,10 @@ export default function BacklogPage() {
 
     setStatus('Lese Datei…');
     try {
+      const sess = (await supabase.auth.getSession()).data.session;
+      const token = sess?.access_token;
+      if (!token) throw new Error('Bitte einloggen');
+
       const rows = await toAoaFromFile(f);
       const cleaned = (rows || []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? '').trim() !== ''));
       setAoa(cleaned);
@@ -99,10 +110,14 @@ export default function BacklogPage() {
 
     setBusy(true);
     try {
+      const sess = (await supabase.auth.getSession()).data.session;
+      const token = sess?.access_token;
+      if (!token) throw new Error('Bitte einloggen');
+
       // START: clear previous + create new import
       const startRes = await fetch('/api/backlog/import', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({
           phase: 'start',
           filename: file?.name || null,
@@ -121,7 +136,7 @@ export default function BacklogPage() {
         const chunk = dataRows.slice(i, i + CHUNK);
         const res = await fetch('/api/backlog/import', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
           body: JSON.stringify({
             phase: 'chunk',
             import_id: importId,
@@ -137,7 +152,7 @@ export default function BacklogPage() {
       // FINISH: store display columns
       const finRes = await fetch('/api/backlog/import', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({
           phase: 'finish',
           import_id: importId,
@@ -176,7 +191,9 @@ export default function BacklogPage() {
 
       <div className="grid">
         <div className="card">
-          <h2 style={{ marginTop:0 }}>Upload</h2>
+          {isAdmin ? (
+        <>
+<h2 style={{ marginTop:0 }}>Upload</h2>
 
           <div className="row" style={{ alignItems:'end' }}>
             <div style={{ flex:1, minWidth:260 }}>
@@ -222,7 +239,15 @@ export default function BacklogPage() {
 
           <hr className="sep" />
 
-          <h2 style={{ marginTop:0 }}>Aktueller Stand</h2>
+          
+        </>
+      ) : (
+        <div className="sub" style={{ marginBottom: 14 }}>
+          Upload &amp; Konfiguration wurden in den Admin-Bereich verschoben → <a href="/admin/imports"><b>Upload Center</b></a>
+        </div>
+      )}
+
+<h2 style={{ marginTop:0 }}>Aktueller Stand</h2>
           {current?.ok ? (
             <div className="small">
               Datei: <span className="mono">{current.filename || '—'}</span> ·

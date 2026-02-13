@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { getSupabaseAdmin } from '../../../../lib/supabaseAdmin';
+import { requireUserFromRequest } from '../../../../lib/authServer';
 
 const DOMAIN = 'flyer-bikes.com';
 const ALLOWED_COUNTRIES = new Set(['DE', 'AT', 'CH']); // extend later if needed
@@ -21,6 +22,10 @@ function normalizeEmailLocalPart(s) {
 
 export async function POST(req) {
   try {
+    const auth = await requireUserFromRequest(req);
+    if (auth.error) return Response.json({ error: auth.error }, { status: 401 });
+    if (!auth.isAdmin) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     const body = await req.json();
     const rows = Array.isArray(body?.rows) ? body.rows : [];
     const emailMode = String(body?.email_mode || 'initial_lastname'); // 'ad_key' | 'initial_lastname'

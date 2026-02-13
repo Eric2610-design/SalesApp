@@ -61,6 +61,11 @@ export default function AdminPage() {
       <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
           <h1 className="h1">Admin</h1>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap', marginTop: 10 }}>
+            <a className="secondary" href="/admin/imports" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)', display: 'inline-block' }}>📥 Upload Center</a>
+            <a className="secondary" href="/admin/apps" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)', display: 'inline-block' }}>🧩 Apps</a>
+            <a className="secondary" href="/admin/installer" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)', display: 'inline-block' }}>📦 Installer</a>
+          </div>
           <p className="sub">Gefährliche Aktionen (Datenbanken leeren). Nur mit Admin Key.</p>
         </div>
         <div className="row">

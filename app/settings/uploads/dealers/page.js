@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { getSupabaseClient } from '../../../../lib/supabaseClient';
 import { toAoaFromFile } from '../../../../lib/fileToAoa';
 import { digitsOnly, splitCustomerNumberAndName, splitStreetAndHouseNumber } from '../../../../lib/parseUtils';
 
@@ -44,6 +45,7 @@ function bestGuessMap(headers) {
 }
 
 export default function DealerUpload() {
+  const supabase = useMemo(() => getSupabaseClient(), []);
   const [aoa, setAoa] = useState([]);
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
@@ -190,9 +192,13 @@ export default function DealerUpload() {
 
     setBusy(true);
     try {
+      const sess = (await supabase.auth.getSession()).data.session;
+      const token = sess?.access_token;
+      if (!token) throw new Error('Bitte einloggen');
+
       const res = await fetch('/api/dealers/import', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
         body: JSON.stringify({ rows }),
       });
       const data = await res.json();

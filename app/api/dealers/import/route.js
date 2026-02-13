@@ -2,6 +2,7 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import { getSupabaseAdmin } from '../../../../lib/supabaseAdmin';
+import { requireUserFromRequest } from '../../../../lib/authServer';
 
 function keyOf(r) {
   return `${r.country_code || ''}||${r.customer_number || ''}`.toUpperCase();
@@ -9,6 +10,10 @@ function keyOf(r) {
 
 export async function POST(req) {
   try {
+    const auth = await requireUserFromRequest(req);
+    if (auth.error) return Response.json({ error: auth.error }, { status: 401 });
+    if (!auth.isAdmin) return Response.json({ error: 'Forbidden' }, { status: 403 });
+
     const body = await req.json();
     const input = Array.isArray(body?.rows) ? body.rows : [];
 
