@@ -24,3 +24,8 @@ Next.js App to import dealer lists (DE/AT/CH) into Supabase and view them.
 - Händler Upload: `/settings/uploads/dealers`
 - Widgets konfigurieren: `/settings/widgets`
 - Uploads Overview: `/settings/uploads`
+
+
+## KPI Widgets
+Für KPI Widgets bitte `supabase/kpi.sql` im Supabase SQL Editor ausführen.
+Route: `/api/kpi/summary`

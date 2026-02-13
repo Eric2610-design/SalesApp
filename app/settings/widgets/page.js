@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { loadWidgets, saveWidgets } from '../../../lib/widgetStore';
 
 const OPTIONS = [
+  { type: 'kpi', title: 'KPI Übersicht (Supabase)' },
   { type: 'quicklinks', title: 'Quick Links' },
   { type: 'hint', title: 'Hinweis' },
 ];
