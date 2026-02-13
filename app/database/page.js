@@ -70,7 +70,7 @@ export default function DatabasePage() {
 
         <div className="row">
           <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
-            ← Import
+            ← Home
           </a>
           <a className="secondary" href="/admin" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
             Admin →

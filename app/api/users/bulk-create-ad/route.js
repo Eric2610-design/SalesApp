@@ -23,7 +23,7 @@ export async function POST(req) {
   try {
     const body = await req.json();
     const rows = Array.isArray(body?.rows) ? body.rows : [];
-    const emailMode = String(body?.email_mode || 'ad_key'); // 'ad_key' | 'name'
+    const emailMode = String(body?.email_mode || 'initial_lastname'); // 'ad_key' | 'initial_lastname'
 
     if (!rows.length) return Response.json({ error: 'Keine Zeilen übergeben' }, { status: 400 });
 
@@ -49,8 +49,8 @@ export async function POST(req) {
       const country = String(r?.country_code ?? '').trim().toUpperCase();
       if (!ad_key || !first || !last || !country) continue;
 
-      let local = emailMode === 'name'
-        ? normalizeEmailLocalPart(`${first}.${last}`)
+      let local = emailMode === 'initial_lastname'
+        ? normalizeEmailLocalPart(`${(first || '').slice(0,1)}.${last}`)
         : normalizeEmailLocalPart(ad_key);
 
       if (!local) continue;
@@ -114,8 +114,8 @@ export async function POST(req) {
 
       const display_name = `${first_name} ${last_name}`.trim();
 
-      const local = emailMode === 'name'
-        ? normalizeEmailLocalPart(`${first_name}.${last_name}`)
+      const local = emailMode === 'initial_lastname'
+        ? normalizeEmailLocalPart(`${(first_name || '').slice(0,1)}.${last_name}`)
         : normalizeEmailLocalPart(ad_key);
 
       if (!local) {

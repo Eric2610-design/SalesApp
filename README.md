@@ -17,3 +17,10 @@ Next.js App to import dealer lists (DE/AT/CH) into Supabase and view them.
 ## Bulk Außendienst Upload
 - Run `supabase/ad_key_migration.sql`
 - Use `/users` → „Außendienst per Datei importieren“
+
+
+## iOS Shell
+- `/` Homescreen (Apps + Widgets)
+- Händler Upload: `/settings/uploads/dealers`
+- Widgets konfigurieren: `/settings/widgets`
+- Uploads Overview: `/settings/uploads`

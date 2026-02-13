@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import * as XLSX from 'xlsx';
+import { toAoaFromFile } from '../../lib/fileToAoa';
 
-const DOMAIN = '@flyer-bikes.com';
+const DOMAIN = 'flyer-bikes.com';
 const COUNTRIES = ['DE', 'AT', 'CH'];
 
 const PERM_KEYS = [
@@ -71,45 +71,6 @@ function formatPrefix(n, len) {
   return len ? s.padStart(len, '0') : s;
 }
 
-function guessDelimiter(text) {
-  if (text.includes(';') && !text.includes(',')) return ';';
-  return ',';
-}
-
-function toAoaFromUpload(file) {
-  return new Promise((resolve, reject) => {
-    const name = (file?.name || '').toLowerCase();
-    const reader = new FileReader();
-
-    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
-    reader.onload = () => {
-      try {
-        if (name.endsWith('.csv') || name.endsWith('.txt')) {
-          const text = String(reader.result || '');
-          const delim = guessDelimiter(text);
-          const rows = text
-            .split(/\r?\n/)
-            .map((l) => l.trim())
-            .filter(Boolean)
-            .map((l) => l.split(delim).map((c) => c.trim()));
-          resolve(rows);
-          return;
-        }
-
-        const data = new Uint8Array(reader.result);
-        const wb = XLSX.read(data, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
-        resolve(aoa);
-      } catch (e) {
-        reject(e);
-      }
-    };
-
-    if (name.endsWith('.csv') || name.endsWith('.txt')) reader.readAsText(file);
-    else reader.readAsArrayBuffer(file);
-  });
-}
 
 export default function UsersPage() {
   const [groups, setGroups] = useState([]);
@@ -139,7 +100,7 @@ export default function UsersPage() {
 const [bulkFile, setBulkFile] = useState(null);
 const [bulkAoa, setBulkAoa] = useState([]);
 const [bulkHasHeader, setBulkHasHeader] = useState(true);
-const [bulkEmailMode, setBulkEmailMode] = useState('ad_key'); // 'ad_key' | 'name'
+const [bulkEmailMode, setBulkEmailMode] = useState('initial_lastname'); // 'initial_lastname' | 'ad_key'
 const [bulkMap, setBulkMap] = useState({ ad_key: 0, last_name: 1, first_name: 2, country_code: 3 });
 const [bulkStatus, setBulkStatus] = useState('');
 const [bulkResult, setBulkResult] = useState(null);
@@ -154,7 +115,7 @@ const [bulkResult, setBulkResult] = useState(null);
   const emailPreview = useMemo(() => {
     const l = localPart.trim();
     if (!l) return '';
-    return l.includes('@') ? l : `${l}${DOMAIN}`;
+    return l.includes('@') ? l : `${l}@${DOMAIN}`;
   }, [localPart]);
 
   const filteredUsers = useMemo(() => {
@@ -326,12 +287,12 @@ const [bulkResult, setBulkResult] = useState(null);
       <div className="header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
         <div>
           <h1 className="h1">Benutzer & Rollen</h1>
-          <p className="sub">Benutzer anlegen (immer {DOMAIN}), Gruppen/Rechte verwalten, Außendienst mit Land + PLZ-Prefix-Gebieten.</p>
+          <p className="sub">Benutzer anlegen (immer @flyer-bikes.com), Gruppen/Rechte verwalten, Außendienst mit Land + PLZ-Prefix-Gebieten.</p>
         </div>
 
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
-            ← Import
+            ← Home
           </a>
           <a className="secondary" href="/admin" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
             Admin →
@@ -615,7 +576,7 @@ const [bulkResult, setBulkResult] = useState(null);
       <label>E-Mail aus…</label><br />
       <select value={bulkEmailMode} onChange={(e) => setBulkEmailMode(e.target.value)} disabled={busy}>
         <option value="ad_key">AD_KEY (z.B. adfly_001@flyer-bikes.com)</option>
-        <option value="name">Vorname.Nachname (z.B. max.mustermann@flyer-bikes.com)</option>
+        <option value="initial_lastname">1. Buchstabe.Nachname (z.B. m.mustermann@flyer-bikes.com)</option>
       </select>
     </div>
   </div>
