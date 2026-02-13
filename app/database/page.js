@@ -72,6 +72,9 @@ export default function DatabasePage() {
           <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
             ← Import
           </a>
+          <a className="secondary" href="/admin" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
+            Admin →
+          </a>
           <a className="secondary" href="/users" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
             Benutzer →
           </a>

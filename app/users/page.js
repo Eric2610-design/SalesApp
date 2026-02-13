@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 
 const DOMAIN = '@flyer-bikes.com';
 const COUNTRIES = ['DE', 'AT', 'CH'];
@@ -70,6 +71,46 @@ function formatPrefix(n, len) {
   return len ? s.padStart(len, '0') : s;
 }
 
+function guessDelimiter(text) {
+  if (text.includes(';') && !text.includes(',')) return ';';
+  return ',';
+}
+
+function toAoaFromUpload(file) {
+  return new Promise((resolve, reject) => {
+    const name = (file?.name || '').toLowerCase();
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden'));
+    reader.onload = () => {
+      try {
+        if (name.endsWith('.csv') || name.endsWith('.txt')) {
+          const text = String(reader.result || '');
+          const delim = guessDelimiter(text);
+          const rows = text
+            .split(/\r?\n/)
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .map((l) => l.split(delim).map((c) => c.trim()));
+          resolve(rows);
+          return;
+        }
+
+        const data = new Uint8Array(reader.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const aoa = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false });
+        resolve(aoa);
+      } catch (e) {
+        reject(e);
+      }
+    };
+
+    if (name.endsWith('.csv') || name.endsWith('.txt')) reader.readAsText(file);
+    else reader.readAsArrayBuffer(file);
+  });
+}
+
 export default function UsersPage() {
   const [groups, setGroups] = useState([]);
   const [groupsError, setGroupsError] = useState('');
@@ -93,6 +134,16 @@ export default function UsersPage() {
   const [toast, setToast] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+
+// Bulk upload Außendienst (Excel/CSV)
+const [bulkFile, setBulkFile] = useState(null);
+const [bulkAoa, setBulkAoa] = useState([]);
+const [bulkHasHeader, setBulkHasHeader] = useState(true);
+const [bulkEmailMode, setBulkEmailMode] = useState('ad_key'); // 'ad_key' | 'name'
+const [bulkMap, setBulkMap] = useState({ ad_key: 0, last_name: 1, first_name: 2, country_code: 3 });
+const [bulkStatus, setBulkStatus] = useState('');
+const [bulkResult, setBulkResult] = useState(null);
+
 
   const [userSearch, setUserSearch] = useState('');
   const [showOnlyAD, setShowOnlyAD] = useState(false);
@@ -281,6 +332,9 @@ export default function UsersPage() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
             ← Import
+          </a>
+          <a className="secondary" href="/admin" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
+            Admin →
           </a>
           <a className="secondary" href="/database" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 10, display: 'inline-block' }}>
             Datenbank →
@@ -518,6 +572,166 @@ export default function UsersPage() {
             Hinweis: „Händler →“ funktioniert, wenn /users/[id]/dealers + dealer_ad_matches View existieren.
           </div>
         </div>
+<div className="card" style={{ gridColumn: '1 / -1' }}>
+  <h2 style={{ marginTop: 0 }}>Außendienst per Datei importieren</h2>
+  <div className="small" style={{ marginBottom: 10 }}>
+    Upload aus Excel/CSV (z.B. Spalten: AD_KEY, Nachname, Vorname, Land). Du kannst Zuordnung & E-Mail-Logik wählen.
+  </div>
+
+  <div className="row" style={{ alignItems: 'end' }}>
+    <div style={{ flex: 1, minWidth: 260 }}>
+      <label>Datei (XLSX/CSV)</label><br />
+      <input
+        type="file"
+        accept=".xlsx,.xls,.csv,.txt"
+        onChange={async (e) => {
+          const f = e.target.files?.[0] || null;
+          setBulkFile(f);
+          setBulkResult(null);
+          setBulkStatus('');
+          if (!f) { setBulkAoa([]); return; }
+          try {
+            setBulkStatus('Lese Datei…');
+            const rows = await toAoaFromUpload(f);
+            const cleaned = (rows || []).filter((r) => Array.isArray(r) && r.some((c) => String(c ?? '').trim() !== ''));
+            setBulkAoa(cleaned);
+            setBulkStatus(`Geladen: ${cleaned.length} Zeilen`);
+          } catch (err) {
+            setBulkAoa([]);
+            setBulkStatus(`Fehler: ${err?.message || String(err)}`);
+          }
+        }}
+        disabled={busy}
+        style={{ width: '100%' }}
+      />
+    </div>
+
+    <label className="small" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <input type="checkbox" checked={bulkHasHeader} onChange={(e) => setBulkHasHeader(e.target.checked)} />
+      erste Zeile ist Header
+    </label>
+
+    <div>
+      <label>E-Mail aus…</label><br />
+      <select value={bulkEmailMode} onChange={(e) => setBulkEmailMode(e.target.value)} disabled={busy}>
+        <option value="ad_key">AD_KEY (z.B. adfly_001@flyer-bikes.com)</option>
+        <option value="name">Vorname.Nachname (z.B. max.mustermann@flyer-bikes.com)</option>
+      </select>
+    </div>
+  </div>
+
+  {bulkStatus ? <div className="small" style={{ marginTop: 10 }}>{bulkStatus}</div> : null}
+
+  {bulkAoa.length ? (
+    <>
+      <hr className="sep" />
+      <h3 style={{ marginTop: 0 }}>Spalten zuordnen</h3>
+
+      {(() => {
+        const header = bulkAoa?.[0] || [];
+        const cols = header.map((h, i) => ({ i, label: String(h || `Spalte ${i + 1}`) }));
+        const colLabel = (idx) => cols.find((c) => c.i === idx)?.label || `Spalte ${idx + 1}`;
+        const setField = (field, value) => setBulkMap((m) => ({ ...m, [field]: Number(value) }));
+
+        return (
+          <div className="row">
+            <div>
+              <label>AD_KEY</label><br />
+              <select value={bulkMap.ad_key} onChange={(e) => setField('ad_key', e.target.value)} disabled={busy}>
+                {cols.map((c) => <option key={c.i} value={c.i}>{colLabel(c.i)}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label>Nachname</label><br />
+              <select value={bulkMap.last_name} onChange={(e) => setField('last_name', e.target.value)} disabled={busy}>
+                {cols.map((c) => <option key={c.i} value={c.i}>{colLabel(c.i)}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label>Vorname</label><br />
+              <select value={bulkMap.first_name} onChange={(e) => setField('first_name', e.target.value)} disabled={busy}>
+                {cols.map((c) => <option key={c.i} value={c.i}>{colLabel(c.i)}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label>Land</label><br />
+              <select value={bulkMap.country_code} onChange={(e) => setField('country_code', e.target.value)} disabled={busy}>
+                {cols.map((c) => <option key={c.i} value={c.i}>{colLabel(c.i)}</option>)}
+              </select>
+            </div>
+          </div>
+        );
+      })()}
+
+      <div className="row" style={{ marginTop: 12 }}>
+        <button
+          onClick={async () => {
+            setToast('');
+            setError('');
+            setBulkResult(null);
+
+            if (!bulkAoa.length) { setError('Bitte erst eine Datei wählen'); return; }
+
+            const start = bulkHasHeader ? 1 : 0;
+            const rows = [];
+            for (let i = start; i < bulkAoa.length; i++) {
+              const r = bulkAoa[i] || [];
+              const get = (idx) => String(r[idx] ?? '').trim();
+
+              const ad_key = get(bulkMap.ad_key);
+              const last_name = get(bulkMap.last_name);
+              const first_name = get(bulkMap.first_name);
+              const country_code = get(bulkMap.country_code).toUpperCase();
+
+              if (!ad_key && !first_name && !last_name) continue;
+
+              rows.push({ ad_key, first_name, last_name, country_code });
+            }
+
+            setBusy(true);
+            try {
+              const res = await fetch('/api/users/bulk-create-ad', {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ rows, email_mode: bulkEmailMode }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data?.error || 'Bulk Import fehlgeschlagen');
+
+              setBulkResult(data);
+              setToast(`Bulk-Import fertig: ${data.created} erstellt, ${data.skipped} übersprungen, ${data.failed} Fehler`);
+              await loadUsers();
+            } catch (e) {
+              setError(e?.message || String(e));
+            } finally {
+              setBusy(false);
+            }
+          }}
+          disabled={busy}
+        >
+          Bulk-Import starten
+        </button>
+
+        <div className="small">
+          Voraussetzung: SQL <span className="mono">supabase/ad_key_migration.sql</span> ausführen (AD_KEY Spalte).
+        </div>
+      </div>
+
+      {bulkResult ? (
+        <div className="card" style={{ marginTop: 12 }}>
+          <div className="small">Ergebnis (Auszug):</div>
+          <pre className="mono small" style={{ whiteSpace: 'pre-wrap' }}>
+            {JSON.stringify({ created: bulkResult.created, skipped: bulkResult.skipped, failed: bulkResult.failed, sample: (bulkResult.results || []).slice(0, 25) }, null, 2)}
+          </pre>
+        </div>
+      ) : null}
+    </>
+  ) : null}
+</div>
+
       </div>
     </div>
   );

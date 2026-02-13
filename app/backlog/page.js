@@ -166,6 +166,9 @@ export default function BacklogPage() {
         <div className="row">
           <a className="secondary" href="/" style={{ textDecoration:'none', padding:'10px 12px', borderRadius:12, display:'inline-block' }}>Import</a>
           <a className="secondary" href="/database" style={{ textDecoration:'none', padding:'10px 12px', borderRadius:12, display:'inline-block' }}>Datenbank</a>
+          <a className="secondary" href="/admin" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
+            Admin →
+          </a>
           <a className="secondary" href="/inventory" style={{ textDecoration:'none', padding:'10px 12px', borderRadius:12, display:'inline-block' }}>Lagerbestand</a>
           <a className="secondary" href="/users" style={{ textDecoration:'none', padding:'10px 12px', borderRadius:12, display:'inline-block' }}>Benutzer</a>
         </div>

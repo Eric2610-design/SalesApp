@@ -253,6 +253,9 @@ export default function Home() {
           <a className="secondary" href="/database" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
             Datenbank ansehen →
           </a>
+          <a className="secondary" href="/admin" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
+            Admin →
+          </a>
           <a className="secondary" href="/users" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 12, display: 'inline-block' }}>
             Benutzer →
           </a>
