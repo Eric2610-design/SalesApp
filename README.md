@@ -29,9 +29,3 @@ Next.js App to import dealer lists (DE/AT/CH) into Supabase and view them.
 ## KPI Widgets
 Für KPI Widgets bitte `supabase/kpi.sql` im Supabase SQL Editor ausführen.
 Route: `/api/kpi/summary`
-
-## Env Vars (Vercel)
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
-- SUPABASE_SERVICE_ROLE_KEY
-- optional: ADMIN_ACTIONS_KEY (für /admin Daten löschen)
