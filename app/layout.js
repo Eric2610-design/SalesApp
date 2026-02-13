@@ -1,5 +1,5 @@
 import './globals.css';
-import Dock from './ui/Dock';
+import Shell from './ui/Shell';
 
 export const metadata = {
   title: 'SalesApp',
@@ -10,22 +10,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="de">
       <body>
-        <div className="ios-bg">
-          <div className="ios-device">
-            <div className="ios-statusbar">
-              <div className="ios-pill" />
-              <div className="ios-status-right">
-                <span className="ios-dot" />
-                <span className="ios-dot" />
-                <span className="ios-dot" />
-              </div>
-            </div>
-
-            <main className="ios-main">{children}</main>
-
-            <Dock />
-          </div>
-        </div>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );
