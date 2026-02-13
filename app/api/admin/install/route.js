@@ -2,8 +2,8 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 import JSZip from 'jszip';
-import { requireUserFromRequest } from '../../../../../lib/authServer';
-import { getSupabaseAdmin } from '../../../../../lib/supabaseAdmin';
+import { requireUserFromRequest } from '../../../../lib/authServer';
+import { getSupabaseAdmin } from '../../../../lib/supabaseAdmin';
 
 function asString(v) {
   return (v == null) ? '' : String(v);
