@@ -72,10 +72,9 @@ export default function InstallerPage() {
       setLoading(true);
       setErr('');
       try {
-        const s = await supabase.auth.getSession();
         const token = await getAccessToken(supabase).catch(() => null);
         if (!alive) return;
-        setDebug({ session: !!s?.data?.session, token: token ? token.slice(0, 12) + '…' : null });
+        setDebug({ session: !!token, token: token ? token.slice(0, 12) + '…' : null });
 
         const meJson = await loadMe();
         if (!alive) return;

@@ -19,10 +19,9 @@ export default function MyProfile() {
       setErr('');
       try {
         // Debug: session + token
-        const s = await supabase.auth.getSession();
         const token = await getAccessToken(supabase).catch(() => null);
         if (!alive) return;
-        setDebug({ token: token ? token.slice(0, 12) + '…' : null, session: !!s?.data?.session });
+        setDebug({ token: token ? token.slice(0, 12) + '…' : null, session: !!token });
 
         const res = await authedFetch(supabase, '/api/auth/me');
         const text = await res.text();
