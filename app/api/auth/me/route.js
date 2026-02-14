@@ -4,14 +4,18 @@ export const dynamic = 'force-dynamic';
 import { requireUserFromRequest } from '../../../../lib/authServer';
 
 export async function GET(req) {
-  const { user, profile, group, isAdmin, error } = await requireUserFromRequest(req);
-  if (error) return Response.json({ error }, { status: 401 });
+  try {
+    const { user, profile, group, isAdmin, error } = await requireUserFromRequest(req);
+    if (error) return Response.json({ error }, { status: 401 });
 
-  return Response.json({
-    ok: true,
-    user: { id: user.id, email: user.email },
-    profile,
-    group,
-    isAdmin,
-  });
+    return Response.json({
+      ok: true,
+      user: { id: user.id, email: user.email },
+      profile,
+      group,
+      isAdmin,
+    });
+  } catch (e) {
+    return Response.json({ error: e?.message || String(e) }, { status: 500 });
+  }
 }
