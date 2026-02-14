@@ -1,252 +1,172 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getSupabaseClient } from '../../lib/supabaseClient';
 
+function errMsg(err) {
+  if (!err) return 'Unbekannter Fehler';
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message || String(err);
+  if (typeof err === 'object') return err.message || err.error_description || err.error || JSON.stringify(err);
+  return String(err);
+}
+
+async function pingSupabase(url, anonKey, ms = 8000) {
+  const base = (url || '').replace(/\/+$/, '');
+  if (!base || !anonKey) throw new Error('Missing URL/Key');
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(`${base}/auth/v1/health`, {
+      headers: { apikey: anonKey, authorization: `Bearer ${anonKey}` },
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    await res.text();
+    return true;
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 export default function LoginPage() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const next = sp.get('next') || '/';
+
   const supabase = useMemo(() => getSupabaseClient(), []);
+
   const [mode, setMode] = useState('password'); // 'password' | 'magic'
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('e.fuhrmann@flyer-bikes.com');
   const [password, setPassword] = useState('');
-
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
-  const [debug, setDebug] = useState('');
+  const [msg, setMsg] = useState('');
 
-  const SUPA_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-  const SUPA_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-  function normalizeEmail(raw) {
-    const value = (raw || '').trim().toLowerCase();
-    if (!value.endsWith('@flyer-bikes.com')) {
-      throw new Error('Bitte eine @flyer-bikes.com E-Mail verwenden.');
-    }
-    return value;
-  }
-
-  function prettyError(e) {
-    if (!e) return 'Unbekannter Fehler';
-    if (typeof e === 'string') return e;
-    const msg = e.message || e.error_description || e.error || '';
-    try {
-      return msg || JSON.stringify(e);
-    } catch {
-      return msg || String(e);
-    }
-  }
-
-  async function withTimeout(promise, ms = 12000) {
-    return await Promise.race([
-      promise,
-      new Promise((_, rej) => setTimeout(() => rej(new Error('Timeout: Supabase antwortet nicht. Prüfe URL/Keys oder Netzwerk.')), ms)),
-    ]);
-  }
-
-  async function testConnection() {
-    setErr('');
+  async function onPassword() {
+    setBusy(true);
     setMsg('');
-    setDebug('Teste Session…');
     try {
-      const res = await withTimeout(supabase.auth.getSession(), 8000);
-      const hasSession = !!res?.data?.session;
-      setDebug(`OK. Session vorhanden: ${hasSession ? 'JA' : 'NEIN'}`);
+      await pingSupabase(url, anon, 8000);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password,
+      });
+
+      if (error) throw error;
+      if (!data?.session) throw new Error('Login fehlgeschlagen (keine Session).');
+
+      router.push(next);
     } catch (e) {
-      setDebug(`Fehler: ${prettyError(e)}`);
-    }
-  }
-
-  async function signInWithPassword(e) {
-    e.preventDefault();
-    setMsg('');
-    setErr('');
-    setDebug('');
-
-    let value = '';
-    try {
-      value = normalizeEmail(email);
-    } catch (e2) {
-      setErr(prettyError(e2));
-      return;
-    }
-
-    if (!password || password.length < 1) {
-      setErr('Bitte Passwort eingeben.');
-      return;
-    }
-
-    setBusy(true);
-    setDebug('Sende Login an Supabase…');
-    try {
-      const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({ email: value, password }),
-        12000
-      );
-
-      if (error) throw error;
-
-      // Verify session exists
-      const ses = await withTimeout(supabase.auth.getSession(), 8000);
-      const ok = !!ses?.data?.session?.access_token;
-
-      setDebug(`Login OK: ${ok ? 'Session gesetzt' : 'Session fehlt (check storage/cookies)'}`);
-
-      if (ok) {
-        window.location.href = '/';
+      const m = errMsg(e);
+      if (m.toLowerCase().includes('abort') || m.toLowerCase().includes('timeout')) {
+        setMsg('Timeout: Supabase antwortet nicht. Prüfe URL/Keys oder Netzwerk. Tipp: öffne /debug für einen Verbindungstest.');
       } else {
-        setErr('Login wurde akzeptiert, aber es wurde keine Session gespeichert. Bitte Cookies/Storage prüfen oder Seite neu laden.');
+        setMsg(m);
       }
-    } catch (e2) {
-      setErr(prettyError(e2));
     } finally {
       setBusy(false);
     }
   }
 
-  async function sendMagicLink(e) {
-    e.preventDefault();
-    setMsg('');
-    setErr('');
-    setDebug('');
-
-    let value = '';
-    try {
-      value = normalizeEmail(email);
-    } catch (e2) {
-      setErr(prettyError(e2));
-      return;
-    }
-
+  async function onMagic() {
     setBusy(true);
-    setDebug('Sende Magic Link…');
+    setMsg('');
     try {
-      const origin = window.location.origin;
-      const { error } = await withTimeout(
-        supabase.auth.signInWithOtp({
-          email: value,
-          options: { emailRedirectTo: `${origin}/auth/callback` },
-        }),
-        12000
-      );
+      await pingSupabase(url, anon, 8000);
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: email.trim().toLowerCase(),
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
       if (error) throw error;
-      setMsg('Magic Link wurde gesendet. Bitte E-Mail öffnen und einloggen.');
-    } catch (e2) {
-      setErr(prettyError(e2));
+      setMsg('Magic Link gesendet. Bitte Mail öffnen.');
+    } catch (e) {
+      const m = errMsg(e);
+      if (m.toLowerCase().includes('abort') || m.toLowerCase().includes('timeout')) {
+        setMsg('Timeout: Supabase antwortet nicht. Prüfe URL/Keys oder Netzwerk. Tipp: öffne /debug für einen Verbindungstest.');
+      } else {
+        setMsg(m);
+      }
     } finally {
       setBusy(false);
     }
+  }
+
+  function onlyFlyer(v) {
+    const s = (v || '').toLowerCase().trim();
+    return s.endsWith('@flyer-bikes.com');
   }
 
   return (
-    <div className="card" style={{ maxWidth: 560, margin: '0 auto' }}>
-      <h1 className="h1">Login</h1>
-      <p className="sub">
-        {mode === 'password'
-          ? 'Einloggen mit Passwort (nur @flyer-bikes.com).'
-          : 'Einloggen per Magic Link (nur @flyer-bikes.com).'}
-      </p>
+    <div style={{ padding: 18 }}>
+      <div className="card" style={{ maxWidth: 520, margin: '0 auto', padding: 16 }}>
+        <h1 style={{ fontSize: 22, marginBottom: 6 }}>Login</h1>
+        <div className="muted" style={{ marginBottom: 12 }}>
+          Einloggen mit Passwort (empfohlen) oder Magic Link (nur @flyer-bikes.com).
+        </div>
 
-      <div className="row" style={{ gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          className={mode === 'password' ? 'primary' : 'secondary'}
-          onClick={() => setMode('password')}
-          style={{ padding: '10px 12px', borderRadius: 14 }}
-        >
-          Passwort
-        </button>
-        <button
-          type="button"
-          className={mode === 'magic' ? 'primary' : 'secondary'}
-          onClick={() => setMode('magic')}
-          style={{ padding: '10px 12px', borderRadius: 14 }}
-        >
-          Magic Link
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          onClick={testConnection}
-          style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}
-        >
-          Verbindung testen
-        </button>
-        <a
-          className="secondary"
-          href="/"
-          style={{
-            padding: '10px 12px',
-            borderRadius: 14,
-            border: '1px solid rgba(17,24,39,.12)',
-            textDecoration: 'none',
-          }}
-        >
-          Zurück
-        </a>
-      </div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+          <button className={mode === 'password' ? 'primary' : 'secondary'} onClick={() => setMode('password')} type="button">
+            Passwort
+          </button>
+          <button className={mode === 'magic' ? 'primary' : 'secondary'} onClick={() => setMode('magic')} type="button">
+            Magic Link
+          </button>
+          <a className="secondary" href="/" style={{ textDecoration: 'none' }}>
+            Zurück
+          </a>
+          <a className="secondary" href="/debug" style={{ textDecoration: 'none' }}>
+            Debug
+          </a>
+        </div>
 
-      <div style={{ marginTop: 14 }}>
-        <label>E-Mail</label>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="e.fuhrmann@flyer-bikes.com"
-          autoComplete="email"
-          style={{ width: '100%', marginTop: 6 }}
-        />
-      </div>
+        <label className="label">E-Mail</label>
+        <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="vorname.nachname@flyer-bikes.com" autoComplete="email" />
 
-      {mode === 'password' ? (
-        <form onSubmit={signInWithPassword} style={{ marginTop: 12 }}>
-          <label>Passwort</label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            autoComplete="current-password"
-            style={{ width: '100%', marginTop: 6 }}
-          />
+        {mode === 'password' ? (
+          <>
+            <label className="label" style={{ marginTop: 12 }}>
+              Passwort
+            </label>
+            <input className="input" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" type="password" autoComplete="current-password" />
 
-          <div className="row" style={{ marginTop: 12 }}>
-            <button disabled={busy} className="primary" type="submit">
+            <button className="primary" style={{ marginTop: 14, width: '100%' }} onClick={onPassword} disabled={busy || !onlyFlyer(email) || !password} type="button">
               {busy ? 'Logge ein…' : 'Einloggen'}
             </button>
+          </>
+        ) : (
+          <button className="primary" style={{ marginTop: 14, width: '100%' }} onClick={onMagic} disabled={busy || !onlyFlyer(email)} type="button">
+            {busy ? 'Sende…' : 'Magic Link senden'}
+          </button>
+        )}
+
+        {msg ? (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 10,
+              borderRadius: 12,
+              background: 'rgba(239,68,68,.10)',
+              border: '1px solid rgba(239,68,68,.20)',
+              color: '#b91c1c',
+              fontSize: 13,
+              whiteSpace: 'pre-wrap',
+            }}
+          >
+            Fehler: {msg}
           </div>
-        </form>
-      ) : (
-        <form onSubmit={sendMagicLink} style={{ marginTop: 12 }}>
-          <div className="row" style={{ marginTop: 12 }}>
-            <button disabled={busy} className="primary" type="submit">
-              {busy ? 'Sende…' : 'Magic Link senden'}
-            </button>
-          </div>
-          <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-            Hinweis: Bei vielen Klicks kann Supabase ein E-Mail Rate Limit setzen.
-          </div>
-        </form>
-      )}
+        ) : null}
 
-      {err ? (
-        <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: 'rgba(239,68,68,.12)', border: '1px solid rgba(239,68,68,.25)' }}>
-          <strong>Fehler:</strong> {err}
+        <div style={{ marginTop: 14, fontSize: 12, opacity: 0.7 }}>
+          Tipp: Wenn Buttons “hängen”, liegt es meistens an einem hängenden Netzwerk-Request. Öffne /debug und prüfe “Auth Health”.
         </div>
-      ) : null}
-
-      {msg ? (
-        <div style={{ marginTop: 12, padding: 10, borderRadius: 12, background: 'rgba(34,197,94,.12)', border: '1px solid rgba(34,197,94,.25)' }}>
-          {msg}
-        </div>
-      ) : null}
-
-      {debug ? (
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          {debug}
-        </div>
-      ) : null}
-
-      <div className="muted" style={{ marginTop: 14, fontSize: 12 }}>
-        Debug: Supabase URL gesetzt: {SUPA_URL ? 'JA' : 'NEIN'} · Key gesetzt: {SUPA_KEY ? 'JA' : 'NEIN'}
       </div>
     </div>
   );
