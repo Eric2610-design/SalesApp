@@ -1,235 +1,83 @@
-'use client';
+'use client'
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSupabaseClient } from '../../../lib/supabaseClient';
-import { authedFetch, getAccessToken } from '../../../lib/authedFetch';
-
-function CopyBox({ text }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
-    } catch {}
-  }
-  return (
-    <div style={{ marginTop: 10 }}>
-      <textarea
-        value={text}
-        readOnly
-        style={{
-          width: '100%',
-          minHeight: 140,
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-          fontSize: 12,
-          padding: 10,
-          borderRadius: 12,
-          border: '1px solid rgba(17,24,39,.12)',
-        }}
-      />
-      <div className="row" style={{ marginTop: 8 }}>
-        <button className="secondary" type="button" onClick={copy} style={{ padding: '10px 12px' }}>
-          {copied ? 'Kopiert ✓' : 'Kopieren'}
-        </button>
-      </div>
-    </div>
-  );
-}
+import { useEffect, useMemo, useState } from 'react'
+import { getSupabaseClient } from '@/lib/supabaseClient'
+import { authedFetch, getAccessToken, resetLocalSession } from '@/lib/authedFetch'
 
 export default function InstallerPage() {
-  const supabase = useMemo(() => getSupabaseClient(), []);
-  const [me, setMe] = useState(null);
-  const [debug, setDebug] = useState({ session: null, token: null });
-  const [file, setFile] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-  const [result, setResult] = useState(null);
-  const [packages, setPackages] = useState([]);
-
-  async function loadMe() {
-    const res = await authedFetch(supabase, '/api/auth/me');
-    const text = await res.text();
-    let j = null;
-    try { j = JSON.parse(text); } catch {}
-    if (!res.ok) throw new Error(j?.error || text || 'Konnte Benutzer nicht laden');
-    return j;
-  }
-
-  async function loadPackages() {
-    const res = await authedFetch(supabase, '/api/admin/install');
-    const text = await res.text();
-    let j = null;
-    try { j = JSON.parse(text); } catch {}
-    if (!res.ok) throw new Error(j?.error || text || 'Konnte Pakete nicht laden');
-    setPackages(j?.packages || []);
-  }
+  const supabase = useMemo(() => getSupabaseClient(), [])
+  const [status, setStatus] = useState('Lade…')
+  const [token, setToken] = useState('—')
+  const [session, setSession] = useState(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
-    let alive = true;
-    (async () => {
-      setLoading(true);
-      setErr('');
+    let mounted = true
+    ;(async () => {
+      setBusy(true)
+      setStatus('Lade…')
       try {
-        const token = await getAccessToken(supabase).catch(() => null);
-        if (!alive) return;
-        setDebug({ session: !!token, token: token ? token.slice(0, 12) + '…' : null });
+        const t = await getAccessToken(supabase)
+        if (!mounted) return
+        setToken(t ? 'ok' : '—')
+        setSession(Boolean(t))
+        if (!t) {
+          setStatus('Nicht eingeloggt. Bitte einloggen.')
+          return
+        }
 
-        const meJson = await loadMe();
-        if (!alive) return;
-        setMe(meJson);
+        // Quick admin check via endpoint
+        const res = await authedFetch('/api/auth/me', supabase)
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.error || 'Profil konnte nicht geladen werden')
+        if (!json?.isAdmin) {
+          setStatus('Nur Admin.')
+          return
+        }
 
-        await loadPackages();
+        setStatus('Bereit. Wähle ein Example oder lade eine Install-Datei hoch.')
       } catch (e) {
-        if (!alive) return;
-        setErr(e?.message || String(e));
+        if (!mounted) return
+        setStatus(`Fehler: ${e.message}`)
       } finally {
-        if (!alive) return;
-        setLoading(false);
+        if (mounted) setBusy(false)
       }
-    })();
-    return () => { alive = false; };
-  }, [supabase]);
-
-  async function install() {
-    setErr('');
-    setResult(null);
-
-    if (!file) {
-      setErr('Bitte ZIP auswählen.');
-      return;
+    })()
+    return () => {
+      mounted = false
     }
+  }, [supabase])
 
-    setBusy(true);
-    try {
-      const token = await getAccessToken(supabase);
-      if (!token) throw new Error('Bitte einloggen');
+  return (
+    <div className="max-w-3xl mx-auto">
+      <div className="bg-white/80 border border-black/10 rounded-2xl p-5 shadow-sm">
+        <div className="text-2xl font-semibold">Installer</div>
+        <div className="text-sm text-black/60 mt-1">{status}</div>
+        <div className="text-xs text-black/50 mt-2">Session: {String(session)} · Token: {token}</div>
 
-      const fd = new FormData();
-      fd.append('file', file);
-
-      const res = await fetch('/api/admin/install', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: fd,
-      });
-
-      const text = await res.text();
-      let j = null;
-      try { j = JSON.parse(text); } catch {}
-      if (!res.ok) throw new Error(j?.error || text || 'Installation fehlgeschlagen');
-
-      setResult(j);
-      await loadPackages();
-    } catch (e) {
-      setErr(e?.message || String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (loading && !err) {
-    return (
-      <div className="card">
-        <h1 className="h1">Installer</h1>
-        <p className="sub">Lade…</p>
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Session: {String(debug.session)} · Token: {debug.token || '—'}
-        </div>
-      </div>
-    );
-  }
-
-  if (err) {
-    return (
-      <div className="card">
-        <h1 className="h1">Installer</h1>
-        <div className="error">{err}</div>
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Session: {String(debug.session)} · Token: {debug.token || '—'}
-        </div>
-        <div className="row" style={{ marginTop: 12, gap: 10, flexWrap: 'wrap' }}>
-          <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>
+        <div className="mt-4 flex gap-2 flex-wrap">
+          <a
+            href="/"
+            className="h-10 px-4 rounded-full bg-white border border-black/10 shadow-sm inline-flex items-center"
+          >
             Homescreen →
           </a>
-          <a className="secondary" href="/login" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>
+          <a
+            href="/login"
+            className="h-10 px-4 rounded-full bg-white border border-black/10 shadow-sm inline-flex items-center"
+          >
             Login →
           </a>
-          <button className="secondary" type="button" onClick={() => window.location.reload()} style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>
-            Neu laden
+          <button
+            disabled={busy}
+            onClick={resetLocalSession}
+            className="h-10 px-4 rounded-full bg-white border border-black/10 shadow-sm"
+            title="Falls Supabase-Session hängt: LocalStorage Session löschen und neu einloggen"
+          >
+            Session reset
           </button>
         </div>
       </div>
-    );
-  }
-
-  const isAdmin = !!me?.isAdmin;
-
-  if (!isAdmin) {
-    return (
-      <div className="card">
-        <h1 className="h1">Installer</h1>
-        <div className="error">Nur Admin.</div>
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Gruppe: {me?.group?.name || '—'} · Session: {String(debug.session)} · Token: {debug.token || '—'}
-        </div>
-        <a className="secondary" href="/" style={{ textDecoration: 'none', padding: '10px 12px', borderRadius: 14, display: 'inline-block', border: '1px solid rgba(17,24,39,.12)', marginTop: 12 }}>
-          Homescreen →
-        </a>
-      </div>
-    );
-  }
-
-  return (
-    <div className="card">
-      <h1 className="h1">Installer</h1>
-      <p className="sub">ZIP hochladen: installiert Apps + SQL (install.sql) + optional Seed-Daten (seed.json).</p>
-
-      <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-        Eingeloggt als: {me?.user?.email} · Session: {String(debug.session)} · Token: {debug.token || '—'}
-      </div>
-
-      <div style={{ marginTop: 14, display: 'grid', gap: 10 }}>
-        <input
-          type="file"
-          accept=".zip"
-          onChange={(e) => setFile(e.target.files?.[0] || null)}
-        />
-        <button className="primary" type="button" onClick={install} disabled={busy || !file} style={{ padding: '10px 12px', borderRadius: 14 }}>
-          {busy ? 'Installiere…' : 'Installieren'}
-        </button>
-      </div>
-
-      {result && (
-        <div style={{ marginTop: 16 }}>
-          <h2 className="h2">Ergebnis</h2>
-          <div className="muted" style={{ fontSize: 12 }}>
-            {result.message || 'OK'}
-          </div>
-          {result.sql && <CopyBox text={result.sql} />}
-        </div>
-      )}
-
-      <div style={{ marginTop: 18 }}>
-        <h2 className="h2">Installierte Pakete</h2>
-        <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-          {packages?.length ? `${packages.length} Pakete` : 'Noch keine Pakete.'}
-        </div>
-        <div style={{ display: 'grid', gap: 8 }}>
-          {(packages || []).map((p) => (
-            <div key={p.id} style={{ padding: 10, borderRadius: 12, border: '1px solid rgba(17,24,39,.12)' }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <strong>{p.package_name}</strong>
-                <span className="muted" style={{ fontSize: 12 }}>{new Date(p.installed_at).toLocaleString()}</span>
-              </div>
-              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                {p.version || 'v1'} · {p.description || ''}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
-  );
+  )
 }
