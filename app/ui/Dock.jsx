@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { getSupabaseClient } from '../../lib/supabaseClient';
+import { getAccessToken } from '../../lib/authedFetch';
 
 const FALLBACK = [
   { href: '/', label: 'Home', icon: '⌂' },
@@ -19,24 +20,34 @@ export default function Dock() {
 
     async function load() {
       try {
-        const { data } = await supabase.auth.getSession();
-        const token = data?.session?.access_token;
+        const token = await getAccessToken(supabase, 4000);
         if (!token) {
           if (alive) setItems(FALLBACK);
           return;
         }
 
-        const res = await fetch('/api/apps/visible', { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
-        const j = await res.json();
-        if (!res.ok) throw new Error(j?.error || 'Dock load failed');
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 8000);
 
-        const dock = (j?.dock || []).map((a) => ({
-          href: a.href || `/apps/${a.slug}`,
-          label: a.title,
-          icon: a.icon || '•',
-        }));
+        try {
+          const res = await fetch('/api/apps/visible', {
+            headers: { authorization: `Bearer ${token}` },
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          const j = await res.json();
+          if (!res.ok) throw new Error(j?.error || 'Dock load failed');
 
-        if (alive) setItems(dock.length ? dock : FALLBACK);
+          const dock = (j?.dock || []).map((a) => ({
+            href: a.href || `/apps/${a.slug}`,
+            label: a.title,
+            icon: a.icon || '•',
+          }));
+
+          if (alive) setItems(dock.length ? dock : FALLBACK);
+        } finally {
+          clearTimeout(t);
+        }
       } catch {
         if (alive) setItems(FALLBACK);
       }

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Dock from './Dock';
 import { getSupabaseClient } from '../../lib/supabaseClient';
+import { withTimeout } from '../../lib/withTimeout';
 
 function nowLabel() {
   const d = new Date();
@@ -31,9 +32,33 @@ export default function Shell({ children }) {
   useEffect(() => setQ(q0), [q0]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session || null));
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
-    return () => sub.subscription?.unsubscribe?.();
+    let alive = true;
+
+    async function load() {
+      try {
+        const res = await withTimeout(
+          supabase.auth.getSession(),
+          4000,
+          'Timeout beim Laden der Session (bitte neu laden).'
+        );
+        if (!alive) return;
+        setSession(res?.data?.session || null);
+      } catch {
+        if (!alive) return;
+        setSession(null);
+      }
+    }
+
+    load();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      if (alive) setSession(s || null);
+    });
+
+    return () => {
+      alive = false;
+      sub.subscription?.unsubscribe?.();
+    };
   }, [supabase]);
 
   function onSearchSubmit(e) {
@@ -47,7 +72,9 @@ export default function Shell({ children }) {
         <div className="ios-statusbar">
           <div className="ios-status-left">
             <div className="ios-pill" />
-            <div className="ios-mini">{clock.date} · {clock.time}</div>
+            <div className="ios-mini">
+              {clock.date} · {clock.time}
+            </div>
           </div>
 
           <form onSubmit={onSearchSubmit} className="ios-search">
@@ -56,9 +83,13 @@ export default function Shell({ children }) {
 
           <div className="ios-status-right">
             {session ? (
-              <a className="ios-avatar" href="/settings" title="Einstellungen">⚙️</a>
+              <a className="ios-avatar" href="/settings" title="Einstellungen">
+                ⚙️
+              </a>
             ) : (
-              <a className="ios-avatar" href="/login" title="Login">🔐</a>
+              <a className="ios-avatar" href="/login" title="Login">
+                🔐
+              </a>
             )}
           </div>
         </div>
