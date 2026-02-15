@@ -67,23 +67,37 @@ function parseBuyingGroupKey(obj, brandsCfg) {
   return slugKey(raw);
 }
 
-function parseNum(v) {
+function parseRawNumber(v) {
   if (v == null) return NaN;
-  if (typeof v === 'number') return v;
-  const raw = String(v).trim();
+  if (typeof v === 'number') return Number.isFinite(v) ? v : NaN;
+
+  let raw = String(v).trim();
   if (!raw) return NaN;
 
-  // tolerate common coordinate formats: '50,1109', '50.1109 N', '50.1109°', 'lat:50.1109'
-  const cleaned = raw
-    .replace(/\s+/g, '')
-    .replace(/,/g, '.')
-    .replace(/°/g, '')
-    .replace(/[NSEW]$/i, '');
+  // tolerate common coordinate formats:
+  // - decimal comma: "50,1109"
+  // - DMS-ish strings containing °
+  // - suffix/prefix letters: "50.1109 N", "E 8.6821", "lat:50.1109"
+  // - german number formatting: "51.123.251,8"
+  let sign = 1;
+  if (/[sSwW]\b/.test(raw) || /[sSwW]$/.test(raw)) sign = -1;
 
-  const m = cleaned.match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/);
+  raw = raw
+    .replace(/\s+/g, '')
+    .replace(/°|º/g, '')
+    .replace(/[NnEeSsWw]/g, '');
+
+  // If both "." and "," exist: assume "." is thousands and "," is decimal.
+  if (raw.includes('.') && raw.includes(',')) {
+    raw = raw.replace(/\./g, '').replace(/,/g, '.');
+  } else if (raw.includes(',') && !raw.includes('.')) {
+    raw = raw.replace(/,/g, '.');
+  }
+
+  const m = raw.match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/);
   if (!m) return NaN;
   const n = Number(m[0]);
-  return Number.isFinite(n) ? n : NaN;
+  return Number.isFinite(n) ? n * sign : NaN;
 }
 
 function isLat(n) {
@@ -91,6 +105,43 @@ function isLat(n) {
 }
 function isLng(n) {
   return Number.isFinite(n) && n >= -180 && n <= 180;
+}
+
+function normalizeScaledCoord(n, kind) {
+  if (!Number.isFinite(n)) return NaN;
+  const limit = kind === 'lat' ? 90 : 180;
+  if (Math.abs(n) <= limit) return n;
+
+  // Many dealer exports store coordinates as integers with the decimal point removed
+  // (e.g. 511232518 => 51.1232518). Some rows may have 6, 7, 14… implied decimals.
+  const sign = n < 0 ? -1 : 1;
+  const abs = Math.abs(n);
+
+  // Heuristic: choose the scaling that lands closest to Central Europe.
+  // (Works well for DE/AT/CH datasets; still keeps values in valid coord ranges globally.)
+  const center = kind === 'lat' ? 52 : 10;
+
+  let best = null;
+  for (let exp = 0; exp <= 15; exp++) {
+    const v = abs / 10 ** exp;
+    if (v > limit) continue;
+
+    let score = Math.abs(v - center);
+    // strongly penalize tiny coords that are "valid" but unrealistic for our domain
+    if (v < 1) score += 100;
+    // slight penalty for extreme edges
+    if (kind === 'lat' && (v < 30 || v > 75)) score += 15;
+    if (kind === 'lng' && (v < -20 || v > 40)) score += 8;
+
+    if (!best || score < best.score) best = { v, exp, score };
+  }
+
+  return best ? best.v * sign : NaN;
+}
+
+function parseCoord(v, kind) {
+  const n = parseRawNumber(v);
+  return normalizeScaledCoord(n, kind);
 }
 
 function pickName(row) {
@@ -161,21 +212,21 @@ function findLatLng(obj, preferredLat, preferredLng) {
   const lngCandidates = [...new Set([...(preferredLng || []), ...candidateLngKeys(keys)])];
 
   for (const lk of latCandidates) {
-    const n = parseNum(obj[lk]);
+    const n = parseCoord(obj[lk], 'lat');
     if (!isLat(n)) continue;
     for (const gk of lngCandidates) {
-      const m = parseNum(obj[gk]);
+      const m = parseCoord(obj[gk], 'lng');
       if (isLng(m)) return { lat: n, lng: m, latKey: lk, lngKey: gk };
     }
   }
 
   // Fallback: try any pair of numeric values that look like coordinates
   for (const lk of keys) {
-    const n = parseNum(obj[lk]);
+    const n = parseCoord(obj[lk], 'lat');
     if (!isLat(n)) continue;
     for (const gk of keys) {
       if (gk === lk) continue;
-      const m = parseNum(obj[gk]);
+      const m = parseCoord(obj[gk], 'lng');
       if (isLng(m)) return { lat: n, lng: m, latKey: lk, lngKey: gk };
     }
   }
@@ -189,10 +240,13 @@ function findLatLng(obj, preferredLat, preferredLng) {
     const s = String(v);
     const nums = s.replace(/,/g, '.').match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
     if (!nums || nums.length < 2) continue;
-    const a = Number(nums[0]);
-    const b = Number(nums[1]);
+    const a = parseCoord(nums[0], 'lat');
+    const b = parseCoord(nums[1], 'lng');
     if (isLat(a) && isLng(b)) return { lat: a, lng: b, latKey: k, lngKey: k };
-    if (isLat(b) && isLng(a)) return { lat: b, lng: a, latKey: k, lngKey: k };
+    // swapped order
+    const aa = parseCoord(nums[0], 'lng');
+    const bb = parseCoord(nums[1], 'lat');
+    if (isLat(bb) && isLng(aa)) return { lat: bb, lng: aa, latKey: k, lngKey: k };
   }
 
   return { lat: NaN, lng: NaN, latKey: '', lngKey: '' };
@@ -260,11 +314,11 @@ function guessLatLngKeysFromSample(rows) {
     const lngCandidates = candidateLngKeys(keys);
 
     for (const k of latCandidates) {
-      const n = parseNum(obj[k]);
+      const n = parseCoord(obj[k], 'lat');
       if (isLat(n)) latScore.set(k, (latScore.get(k) || 0) + 1);
     }
     for (const k of lngCandidates) {
-      const n = parseNum(obj[k]);
+      const n = parseCoord(obj[k], 'lng');
       if (isLng(n)) lngScore.set(k, (lngScore.get(k) || 0) + 1);
     }
   }
