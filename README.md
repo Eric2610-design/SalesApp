@@ -60,3 +60,22 @@ Hinweis: Im Installer gibt es dafür Beispiel-SQLs (oben rechts „Beispiele“)
 Wenn Import/Log Fehler wie „relation … does not exist“ melden:
 - Admin → Datenimport → **Setup: Import-Tabellen + Admin-Log**
 - oder im Admin → Installer das Beispiel **03 import tables** ausführen.
+
+## UI/Apps Updates (2026-02-15.4)
+
+- Admin → **Dataset Einstellungen** (`/admin/datasets`):
+  - Anzeigespalten pro Dataset dauerhaft konfigurieren
+  - Spalten-Typen/Formatierung anpassen (z.B. Datum als Excel-Zahl → Datum)
+  - Live-Vorschau
+  - Speichern schreibt in `dataset_schemas` (mit Admin-Log + Undo)
+- Admin → Datenimport:
+  - Nach der Analyse kannst du **den Typ pro Spalte ändern**
+  - Optional: „Als Standard-Schema speichern“ (Anzeige + Typen)
+  - Dataset-Seiten formatieren Werte anhand des Schemas
+
+### SQL-Änderung
+
+Für die neuen Schema-Funktionen brauchst du die aktualisierten Import-Tabellen:
+- Im Admin → Installer: Beispiel **03 import tables** erneut ausführen (idempotent)
+  - fügt `dataset_schemas` hinzu
+  - ergänzt `dataset_imports` um `column_types` + `save_schema`

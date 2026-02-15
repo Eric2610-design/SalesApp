@@ -39,6 +39,22 @@ async function undoAction(admin, undo) {
     return { ok: true, result: { type, slug: row.slug } };
   }
 
+  if (type === 'restore_dataset_schema') {
+    const dataset = String(undo.dataset || '').trim();
+    if (!dataset) throw new Error('Undo missing dataset');
+    const prev = undo.previous_row;
+
+    if (!prev) {
+      const { error } = await admin.from('dataset_schemas').delete().eq('dataset', dataset);
+      if (error) throw new Error(error.message);
+      return { ok: true, result: { type, dataset, restored: 'deleted' } };
+    }
+
+    const { error } = await admin.from('dataset_schemas').upsert(prev, { onConflict: 'dataset' });
+    if (error) throw new Error(error.message);
+    return { ok: true, result: { type, dataset, restored: true } };
+  }
+
   throw new Error('Unsupported undo type');
 }
 

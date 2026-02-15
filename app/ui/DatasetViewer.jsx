@@ -12,7 +12,7 @@ function collectColumns(rows, maxRows = 50) {
 }
 
 export default function DatasetViewer({ dataset, title }) {
-  const [data, setData] = useState({ import: null, rows: [] });
+  const [data, setData] = useState({ import: null, schema: null, rows: [] });
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -23,7 +23,7 @@ export default function DatasetViewer({ dataset, title }) {
         const res = await fetch(`/api/data/${dataset}?limit=200`, { cache: 'no-store' });
         const j = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(j?.error || 'Fehler');
-        if (alive) setData({ import: j.import || null, rows: j.rows || [] });
+        if (alive) setData({ import: j.import || null, schema: j.schema || null, rows: j.rows || [] });
       } catch (e) {
         if (alive) setErr(e?.message || String(e));
       }
@@ -32,10 +32,68 @@ export default function DatasetViewer({ dataset, title }) {
   }, [dataset]);
 
   const cols = useMemo(() => {
+    const sc = data?.schema?.display_columns;
+    if (Array.isArray(sc) && sc.length) return sc;
     const dc = data?.import?.display_columns;
     if (Array.isArray(dc) && dc.length) return dc;
     return collectColumns(data.rows);
-  }, [data.rows, data.import]);
+  }, [data.rows, data.import, data.schema]);
+
+  const typeMap = useMemo(() => {
+    return data?.schema?.column_types || data?.import?.column_types || {};
+  }, [data.schema, data.import]);
+
+  function excelSerialToDate(serial) {
+    const n = Number(serial);
+    if (!Number.isFinite(n)) return null;
+    // Excel epoch (1899-12-30)
+    const ms = Math.round((n - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function formatCell(val, type) {
+    if (val == null) return '';
+    const t = String(type || 'text');
+
+    if (t === 'leer') return '';
+
+    if (t === 'number') {
+      const n = typeof val === 'number' ? val : Number(String(val).replace(',', '.'));
+      if (Number.isFinite(n)) return String(n);
+      return String(val);
+    }
+
+    if (t === 'boolean') {
+      const s = String(val).trim().toLowerCase();
+      const yes = ['1', 'true', 'yes', 'ja', 'j', 'x'].includes(s);
+      const no = ['0', 'false', 'no', 'nein', 'n', ''].includes(s);
+      if (typeof val === 'boolean') return val ? 'ja' : 'nein';
+      if (yes) return 'ja';
+      if (no) return 'nein';
+      return String(val);
+    }
+
+    if (t === 'date_excel') {
+      const d = excelSerialToDate(val);
+      if (!d) return String(val);
+      return d.toLocaleDateString();
+    }
+
+    if (t === 'date') {
+      const d = new Date(val);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
+      // If it's a number and looks like Excel, try Excel conversion
+      const n = Number(val);
+      if (Number.isFinite(n) && n > 20000 && n < 70000) {
+        const dd = excelSerialToDate(n);
+        if (dd) return dd.toLocaleDateString();
+      }
+      return String(val);
+    }
+
+    return String(val);
+  }
 
   if (err) {
     return (
@@ -79,7 +137,7 @@ export default function DatasetViewer({ dataset, title }) {
                 <tr key={r.row_index}>
                   <td className="muted">{r.row_index + 1}</td>
                   {cols.map((c) => (
-                    <td key={c}>{String((r.row_data || {})[c] ?? '')}</td>
+                    <td key={c}>{formatCell((r.row_data || {})[c], typeMap?.[c])}</td>
                   ))}
                 </tr>
               ))}
@@ -94,6 +152,7 @@ export default function DatasetViewer({ dataset, title }) {
       <div className="row">
         <a className="secondary" href="/" style={{ textDecoration: 'none' }}>Home</a>
         <a className="secondary" href="/admin/import" style={{ textDecoration: 'none' }}>Import</a>
+        <a className="secondary" href={`/admin/datasets?dataset=${encodeURIComponent(dataset)}`} style={{ textDecoration: 'none' }}>Spalten/Typen</a>
       </div>
     </div>
   );

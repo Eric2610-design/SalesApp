@@ -18,16 +18,26 @@ export async function GET(req, ctx) {
 
   const admin = getSupabaseAdmin();
 
+  // Optional: dataset schema overrides (display columns + type overrides)
+  const { data: schemaRows } = await admin
+    .from('dataset_schemas')
+    .select('dataset,display_columns,import_columns,column_types,updated_by,updated_at')
+    .eq('dataset', dataset)
+    .limit(1);
+
+  const schema = schemaRows?.[0] || null;
+
   const { data: imp, error: impErr } = await admin
     .from('dataset_imports')
-    .select('id,dataset,filename,row_count,inserted_count,status,selected_columns,display_columns,created_at,created_by')
+    // Use '*' to stay compatible with older installs (missing newer columns)
+    .select('*')
     .eq('dataset', dataset)
     .order('created_at', { ascending: false })
     .limit(1);
 
   if (impErr) return NextResponse.json({ error: impErr.message }, { status: 500 });
   const latest = imp?.[0] || null;
-  if (!latest) return NextResponse.json({ import: null, rows: [] });
+  if (!latest) return NextResponse.json({ import: null, schema, rows: [] });
 
   const { data: rows, error: rowsErr } = await admin
     .from('dataset_rows')
@@ -38,5 +48,5 @@ export async function GET(req, ctx) {
 
   if (rowsErr) return NextResponse.json({ error: rowsErr.message }, { status: 500 });
 
-  return NextResponse.json({ import: latest, rows: rows || [] });
+  return NextResponse.json({ import: latest, schema, rows: rows || [] });
 }

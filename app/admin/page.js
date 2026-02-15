@@ -7,6 +7,7 @@ const ADMIN_TILES = [
   { title: 'Installer', icon: '🛠️', href: '/admin/installer', sub: 'SQL ausführen / Setup' },
   { title: 'Benutzer', icon: '👥', href: '/admin/users', sub: 'Gruppen & Profile' },
   { title: 'Datenimport', icon: '⬆️', href: '/admin/import', sub: 'CSV/XLSX hochladen' },
+  { title: 'Dataset Einstellungen', icon: '🧱', href: '/admin/datasets', sub: 'Spalten + Typen + Vorschau' },
   { title: 'Log', icon: '🧾', href: '/admin/log', sub: 'Letzte Admin-Aktionen' }
 ];
 

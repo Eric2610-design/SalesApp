@@ -21,6 +21,8 @@ export async function POST(req) {
 
   const selected_columns = Array.isArray(body.selected_columns) ? body.selected_columns : null;
   const display_columns = Array.isArray(body.display_columns) ? body.display_columns : null;
+  const column_types = body.column_types && typeof body.column_types === 'object' ? body.column_types : null;
+  const save_schema = body.save_schema === false ? false : true;
   const schema_guess = body.schema_guess && typeof body.schema_guess === 'object' ? body.schema_guess : null;
 
   const admin = getSupabaseAdmin();
@@ -36,6 +38,8 @@ export async function POST(req) {
       status: 'uploading',
       selected_columns,
       display_columns,
+      column_types,
+      save_schema,
       schema_guess,
       created_by: me?.profile?.email || me?.user?.email || null
     })

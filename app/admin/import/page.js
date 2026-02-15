@@ -67,17 +67,29 @@ function guessType(samples) {
   const s = (samples || []).filter((x) => x !== '' && x != null).map((x) => String(x));
   if (!s.length) return 'leer';
 
+  const boolOk = s.every((v) => {
+    const vv = v.trim().toLowerCase();
+    return ['1','0','true','false','yes','no','ja','nein','x',''].includes(vv);
+  });
+  if (boolOk) return 'boolean';
+
   const numOk = s.every((v) => {
     const vv = v.replace(',', '.');
     return vv !== '' && !Number.isNaN(Number(vv));
   });
-  if (numOk) return 'zahl';
+  if (numOk) {
+    // Excel dates are often numeric serials ~ 20000..60000
+    const nums = s.map((v) => Number(v.replace(',', '.'))).filter((n) => Number.isFinite(n));
+    const looksExcelDate = nums.length && nums.every((n) => n > 20000 && n < 70000);
+    if (looksExcelDate) return 'date_excel';
+    return 'number';
+  }
 
   const dateOk = s.every((v) => {
     const t = Date.parse(v);
     return !Number.isNaN(t);
   });
-  if (dateOk) return 'datum';
+  if (dateOk) return 'date';
 
   return 'text';
 }
@@ -122,6 +134,8 @@ export default function AdminImportPage() {
 
   const [importCols, setImportCols] = useState({});
   const [displayCols, setDisplayCols] = useState({});
+  const [colTypes, setColTypes] = useState({});
+  const [saveSchema, setSaveSchema] = useState(true);
 
   const rowsRef = useRef([]);
 
@@ -261,9 +275,11 @@ export default function AdminImportPage() {
       // Defaults: recommended, but always show at least 6 columns if possible
       const imp = {};
       const disp = {};
+      const types = {};
       colStats.forEach((c) => {
         imp[c.name] = !!c.recommendImport;
         disp[c.name] = !!c.recommendDisplay;
+        types[c.name] = c.type;
       });
 
       // ensure display implies import
@@ -277,6 +293,7 @@ export default function AdminImportPage() {
 
       setImportCols(imp);
       setDisplayCols(disp);
+      setColTypes(types);
       setAnalysis({ rowCount: rows.length, columns: colStats });
       setStep('choose');
       setProgress({ phase: '', done: 0, total: 0 });
@@ -347,6 +364,9 @@ export default function AdminImportPage() {
       const selectedImport = Object.keys(importCols).filter((k) => importCols[k]);
       const selectedDisplay = Object.keys(displayCols).filter((k) => displayCols[k]);
 
+      const selectedTypes = {};
+      for (const c of selectedImport) selectedTypes[c] = colTypes?.[c] || 'text';
+
       if (!selectedImport.length) throw new Error('Bitte mindestens 1 Spalte zum Import auswählen.');
       if (selectedDisplay.some((k) => !importCols[k])) throw new Error('Anzeigespalten müssen auch importiert werden.');
 
@@ -369,6 +389,8 @@ export default function AdminImportPage() {
           row_count: filteredRows.length,
           selected_columns: selectedImport,
           display_columns: selectedDisplay,
+          column_types: selectedTypes,
+          save_schema: !!saveSchema,
           schema_guess: {
             analyzed_columns: analysis?.columns?.length || 0,
             inspected_rows: Math.min(200, filteredRows.length)
@@ -431,6 +453,56 @@ export default function AdminImportPage() {
     return Math.min(100, Math.round((progress.done / progress.total) * 100));
   }, [progress]);
 
+  function excelSerialToDate(serial) {
+    const n = Number(serial);
+    if (!Number.isFinite(n)) return null;
+    const ms = Math.round((n - 25569) * 86400 * 1000);
+    const d = new Date(ms);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  function formatCell(val, type) {
+    if (val == null) return '';
+    const t = String(type || 'text');
+
+    if (t === 'leer') return '';
+
+    if (t === 'number') {
+      const n = typeof val === 'number' ? val : Number(String(val).replace(',', '.'));
+      if (Number.isFinite(n)) return String(n);
+      return String(val);
+    }
+
+    if (t === 'boolean') {
+      const s = String(val).trim().toLowerCase();
+      const yes = ['1', 'true', 'yes', 'ja', 'j', 'x'].includes(s);
+      const no = ['0', 'false', 'no', 'nein', 'n', ''].includes(s);
+      if (typeof val === 'boolean') return val ? 'ja' : 'nein';
+      if (yes) return 'ja';
+      if (no) return 'nein';
+      return String(val);
+    }
+
+    if (t === 'date_excel') {
+      const d = excelSerialToDate(val);
+      if (!d) return String(val);
+      return d.toLocaleDateString();
+    }
+
+    if (t === 'date') {
+      const d = new Date(val);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
+      const n = Number(val);
+      if (Number.isFinite(n) && n > 20000 && n < 70000) {
+        const dd = excelSerialToDate(n);
+        if (dd) return dd.toLocaleDateString();
+      }
+      return String(val);
+    }
+
+    return String(val);
+  }
+
   if (err) {
     return (
       <div className="card">
@@ -475,6 +547,8 @@ export default function AdminImportPage() {
               setAnalysis(null);
               setImportCols({});
               setDisplayCols({});
+              setColTypes({});
+              setSaveSchema(true);
             }}>
               {DATASETS.map(d => (
                 <option key={d.key} value={d.key}>{d.title}</option>
@@ -495,6 +569,8 @@ export default function AdminImportPage() {
                 setAnalysis(null);
                 setImportCols({});
                 setDisplayCols({});
+                setColTypes({});
+                setSaveSchema(true);
               }}
             />
             <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
@@ -550,7 +626,21 @@ export default function AdminImportPage() {
                     <div style={{ fontWeight: 700 }}>{c.name}</div>
                     <div className="muted" style={{ fontSize: 12 }}>{c.recommendImport ? 'empfohlen' : ''}</div>
                   </td>
-                  <td className="muted">{c.type}</td>
+                  <td>
+                    <select
+                      className="input"
+                      style={{ padding: '6px 10px', fontSize: 12 }}
+                      value={colTypes?.[c.name] || c.type}
+                      onChange={(e) => setColTypes({ ...colTypes, [c.name]: e.target.value })}
+                    >
+                      <option value="text">text</option>
+                      <option value="number">zahl</option>
+                      <option value="date">datum</option>
+                      <option value="date_excel">datum (Excel-Zahl)</option>
+                      <option value="boolean">ja/nein</option>
+                      <option value="leer">leer</option>
+                    </select>
+                  </td>
                   <td className="muted">{pct(c.nonEmpty, c.inspected)}</td>
                   <td className="muted" style={{ fontSize: 12 }}>{c.sample.join(' · ')}</td>
                   <td>
@@ -593,9 +683,47 @@ export default function AdminImportPage() {
           </table>
 
           <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
+            <label className="muted" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" checked={!!saveSchema} onChange={(e) => setSaveSchema(e.target.checked)} />
+              <span style={{ fontSize: 12 }}>Als Standard-Schema speichern (Anzeige + Typen)</span>
+            </label>
             <button className="primary" onClick={startImport} disabled={busy || step === 'uploading'}>Import starten</button>
             <button className="secondary" type="button" onClick={() => { setStep('select'); setAnalysis(null); }} disabled={busy}>Neue Datei</button>
           </div>
+
+          {analysis?.rowCount ? (
+            <div style={{ marginTop: 14 }}>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>Vorschau (erste Zeilen)</div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+                Anzeige basiert auf deinen gewählten Anzeigespalten + Typen.
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table" style={{ minWidth: 600 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ width: 60 }}>#</th>
+                      {Object.keys(displayCols).filter((k) => displayCols[k]).slice(0, 12).map((cname) => (
+                        <th key={cname}>{cname}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(rowsRef.current || []).slice(0, 8).map((r, idx) => (
+                      <tr key={idx}>
+                        <td className="muted">{idx + 1}</td>
+                        {Object.keys(displayCols).filter((k) => displayCols[k]).slice(0, 12).map((cname) => (
+                          <td key={cname}>{formatCell((r || {})[cname], colTypes?.[cname])}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                  Hinweis: Vorschau zeigt max. 12 Spalten und 8 Zeilen (für Performance).
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {step === 'uploading' && progress.total ? (
             <div style={{ marginTop: 12 }}>
