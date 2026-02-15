@@ -54,7 +54,8 @@ export default function Shell({ children }) {
       <div className="ios-device">
         <div className="ios-statusbar">
           <div className="ios-status-left">
-            <div className="ios-pill" />
+            <button className="ios-navbtn" type="button" onClick={() => router.back()} title="Zurück">←</button>
+            <a className="ios-navbtn" href="/" title="Home">⌂</a>
           </div>
 
           <form onSubmit={onSearchSubmit} className="ios-search">

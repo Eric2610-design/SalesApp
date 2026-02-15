@@ -19,7 +19,7 @@ export async function GET(req) {
   const admin = getSupabaseAdmin();
   const { data, error } = await admin
     .from('dataset_schemas')
-    .select('dataset,display_columns,import_columns,column_types,updated_by,updated_at')
+    .select('dataset,display_columns,import_columns,column_types,column_labels,joins,view_config,updated_by,updated_at')
     .eq('dataset', dataset)
     .limit(1);
 
@@ -39,6 +39,9 @@ export async function POST(req) {
   const display_columns = Array.isArray(body.display_columns) ? body.display_columns : null;
   const import_columns = Array.isArray(body.import_columns) ? body.import_columns : null;
   const column_types = body.column_types && typeof body.column_types === 'object' ? body.column_types : null;
+  const column_labels = body.column_labels && typeof body.column_labels === 'object' ? body.column_labels : null;
+  const joins = Array.isArray(body.joins) ? body.joins : null;
+  const view_config = body.view_config && typeof body.view_config === 'object' ? body.view_config : null;
 
   const admin = getSupabaseAdmin();
   const actor = me?.profile?.email || me?.user?.email || null;
@@ -46,7 +49,7 @@ export async function POST(req) {
   // load previous for undo
   const { data: prevRows } = await admin
     .from('dataset_schemas')
-    .select('dataset,display_columns,import_columns,column_types,updated_by,updated_at')
+    .select('dataset,display_columns,import_columns,column_types,column_labels,joins,view_config,updated_by,updated_at')
     .eq('dataset', dataset)
     .limit(1);
   const previous = prevRows?.[0] || null;
@@ -56,6 +59,9 @@ export async function POST(req) {
     display_columns,
     import_columns,
     column_types,
+    column_labels,
+    joins,
+    view_config,
     updated_by: actor,
     updated_at: new Date().toISOString()
   };

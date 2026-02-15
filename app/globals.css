@@ -14,9 +14,8 @@ body{
   margin:0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
   color:var(--text);
-  background: radial-gradient(1200px 800px at 20% 10%, var(--bg2), transparent 55%),
-              radial-gradient(1200px 800px at 70% 20%, #eef2ff, transparent 55%),
-              linear-gradient(180deg, var(--bg1), #f9fafb 60%);
+  background: #ffffff;
+  overflow-x:hidden;
 }
 a{ color:inherit; }
 
@@ -28,14 +27,15 @@ a{ color:inherit; }
 .ios-device{
   width:100%;
   min-height: 100vh;
-  background: rgba(255,255,255,.55);
+  background: #ffffff;
   border:none;
   border-radius: 0;
   box-shadow: none;
-  backdrop-filter: blur(16px);
+  backdrop-filter: none;
   overflow:hidden;
   display:flex;
   flex-direction:column;
+  height: 100vh;
 }
 .ios-statusbar{
   display:flex;
@@ -45,7 +45,10 @@ a{ color:inherit; }
   flex-wrap:wrap;
   padding:14px 16px;
   border-bottom:1px solid var(--border);
-  background: rgba(255,255,255,.65);
+  background: #ffffff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 .ios-status-left{
   display:flex;
@@ -53,12 +56,20 @@ a{ color:inherit; }
   gap:10px;
   min-width: 60px;
 }
-.ios-pill{
-  width:56px;
-  height:18px;
-  border-radius:999px;
-  background: rgba(15,23,42,.08);
+.ios-navbtn{
+  width:38px;
+  height:36px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius: 12px;
+  border:1px solid var(--border);
+  background: rgba(255,255,255,.92);
+  text-decoration:none;
+  font-weight: 900;
+  cursor:pointer;
 }
+.ios-navbtn:hover{ border-color: rgba(15,23,42,.22); }
 .ios-mini{
   font-size:12px;
   color: var(--muted);
@@ -97,6 +108,8 @@ a{ color:inherit; }
 .ios-main{
   flex:1;
   padding:18px;
+  overflow:auto;
+  overflow-x:hidden;
 }
 
 .ios-dock{
@@ -104,8 +117,9 @@ a{ color:inherit; }
   gap:10px;
   padding:12px 12px 14px;
   border-top:1px solid var(--border);
-  background: rgba(255,255,255,.7);
-  overflow-x:auto;
+  background: rgba(255,255,255,.92);
+  overflow-x:hidden;
+  flex-wrap: wrap;
 }
 .ios-dock-item{
   display:flex;
@@ -223,3 +237,22 @@ textarea{ min-height: 160px; resize: vertical; }
   backdrop-filter: blur(8px);
   z-index: 1;
 }
+
+/* Cards (Inventory grouping) */
+.cards-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+.data-card{
+  border:1px solid var(--border);
+  border-radius: 18px;
+  padding: 12px;
+  background: rgba(255,255,255,.92);
+}
+.data-card-title{ display:flex; align-items:flex-start; justify-content:space-between; gap: 10px; padding-bottom: 10px; border-bottom:1px solid var(--border); }
+.data-card-body{ padding-top: 10px; }
+.data-card-list{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap: 8px; }
+.data-card-row{ display:flex; flex-direction:column; gap: 4px; padding: 8px 10px; border:1px solid rgba(15,23,42,.08); border-radius: 12px; background: rgba(255,255,255,.75); }
+.data-card-field{ display:block; }

@@ -55,6 +55,22 @@ async function undoAction(admin, undo) {
     return { ok: true, result: { type, dataset, restored: true } };
   }
 
+  if (type === 'restore_page_config') {
+    const key = String(undo.key || '').trim();
+    if (!key) throw new Error('Undo missing key');
+    const prev = undo.previous_row;
+
+    if (!prev) {
+      const { error } = await admin.from('page_configs').delete().eq('key', key);
+      if (error) throw new Error(error.message);
+      return { ok: true, result: { type, key, restored: 'deleted' } };
+    }
+
+    const { error } = await admin.from('page_configs').upsert(prev, { onConflict: 'key' });
+    if (error) throw new Error(error.message);
+    return { ok: true, result: { type, key, restored: true } };
+  }
+
   throw new Error('Unsupported undo type');
 }
 

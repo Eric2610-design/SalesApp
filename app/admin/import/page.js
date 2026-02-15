@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
+import { inferTypeFromSamples, formatCell } from '@/lib/typeDetect';
 
 const DATASETS = [
   { key: 'dealers', title: 'Händler', hint: 'Import in die Händler-Datenbasis' },
@@ -61,37 +62,6 @@ function parseCsv(text) {
 
 function norm(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9äöüß]+/gi, ' ');
-}
-
-function guessType(samples) {
-  const s = (samples || []).filter((x) => x !== '' && x != null).map((x) => String(x));
-  if (!s.length) return 'leer';
-
-  const boolOk = s.every((v) => {
-    const vv = v.trim().toLowerCase();
-    return ['1','0','true','false','yes','no','ja','nein','x',''].includes(vv);
-  });
-  if (boolOk) return 'boolean';
-
-  const numOk = s.every((v) => {
-    const vv = v.replace(',', '.');
-    return vv !== '' && !Number.isNaN(Number(vv));
-  });
-  if (numOk) {
-    // Excel dates are often numeric serials ~ 20000..60000
-    const nums = s.map((v) => Number(v.replace(',', '.'))).filter((n) => Number.isFinite(n));
-    const looksExcelDate = nums.length && nums.every((n) => n > 20000 && n < 70000);
-    if (looksExcelDate) return 'date_excel';
-    return 'number';
-  }
-
-  const dateOk = s.every((v) => {
-    const t = Date.parse(v);
-    return !Number.isNaN(t);
-  });
-  if (dateOk) return 'date';
-
-  return 'text';
 }
 
 function buildRecommendations(dataset, colName) {
@@ -230,11 +200,12 @@ export default function AdminImportPage() {
 
       if (name.endsWith('.xlsx')) {
         const ab = await file.arrayBuffer();
-        const wb = XLSX.read(ab, { type: 'array' });
+        // cellDates helps Excel date cells become real Date objects.
+        const wb = XLSX.read(ab, { type: 'array', cellDates: true });
         const sheetName = wb.SheetNames?.[0];
         if (!sheetName) throw new Error('XLSX ohne Tabellenblatt.');
         const sheet = wb.Sheets[sheetName];
-        rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        rows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
       } else {
         const text = await file.text();
         rows = parseCsv(text);
@@ -257,14 +228,14 @@ export default function AdminImportPage() {
           const vv = v == null ? '' : String(v);
           if (vv.trim() !== '') {
             nonEmpty++;
-            if (sample.length < 3) sample.push(vv);
+            if (sample.length < 3) sample.push(v);
           }
         }
-        const type = guessType(sample);
+        const type2 = inferTypeFromSamples(sample, c);
         const rec = buildRecommendations(dataset, c);
         return {
           name: c,
-          type,
+          type: type2,
           nonEmpty,
           inspected: Math.min(200, rows.length),
           sample,
@@ -453,55 +424,7 @@ export default function AdminImportPage() {
     return Math.min(100, Math.round((progress.done / progress.total) * 100));
   }, [progress]);
 
-  function excelSerialToDate(serial) {
-    const n = Number(serial);
-    if (!Number.isFinite(n)) return null;
-    const ms = Math.round((n - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-
-  function formatCell(val, type) {
-    if (val == null) return '';
-    const t = String(type || 'text');
-
-    if (t === 'leer') return '';
-
-    if (t === 'number') {
-      const n = typeof val === 'number' ? val : Number(String(val).replace(',', '.'));
-      if (Number.isFinite(n)) return String(n);
-      return String(val);
-    }
-
-    if (t === 'boolean') {
-      const s = String(val).trim().toLowerCase();
-      const yes = ['1', 'true', 'yes', 'ja', 'j', 'x'].includes(s);
-      const no = ['0', 'false', 'no', 'nein', 'n', ''].includes(s);
-      if (typeof val === 'boolean') return val ? 'ja' : 'nein';
-      if (yes) return 'ja';
-      if (no) return 'nein';
-      return String(val);
-    }
-
-    if (t === 'date_excel') {
-      const d = excelSerialToDate(val);
-      if (!d) return String(val);
-      return d.toLocaleDateString();
-    }
-
-    if (t === 'date') {
-      const d = new Date(val);
-      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
-      const n = Number(val);
-      if (Number.isFinite(n) && n > 20000 && n < 70000) {
-        const dd = excelSerialToDate(n);
-        if (dd) return dd.toLocaleDateString();
-      }
-      return String(val);
-    }
-
-    return String(val);
-  }
+  // formatCell comes from lib/typeDetect
 
   if (err) {
     return (
@@ -636,6 +559,8 @@ export default function AdminImportPage() {
                       <option value="text">text</option>
                       <option value="number">zahl</option>
                       <option value="date">datum</option>
+                      <option value="datetime">datum+uhrzeit</option>
+                      <option value="time">uhrzeit</option>
                       <option value="date_excel">datum (Excel-Zahl)</option>
                       <option value="boolean">ja/nein</option>
                       <option value="leer">leer</option>

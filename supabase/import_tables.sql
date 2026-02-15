@@ -35,6 +35,9 @@ create table if not exists public.dataset_schemas (
   display_columns jsonb,
   import_columns jsonb,
   column_types jsonb,
+  column_labels jsonb,
+  joins jsonb,
+  view_config jsonb,
   updated_by text,
   updated_at timestamptz default now()
 );
@@ -42,8 +45,23 @@ create table if not exists public.dataset_schemas (
 alter table public.dataset_schemas add column if not exists display_columns jsonb;
 alter table public.dataset_schemas add column if not exists import_columns jsonb;
 alter table public.dataset_schemas add column if not exists column_types jsonb;
+alter table public.dataset_schemas add column if not exists column_labels jsonb;
+alter table public.dataset_schemas add column if not exists joins jsonb;
+alter table public.dataset_schemas add column if not exists view_config jsonb;
 alter table public.dataset_schemas add column if not exists updated_by text;
 alter table public.dataset_schemas add column if not exists updated_at timestamptz default now();
+
+-- Page configs (e.g. dealer detail view)
+create table if not exists public.page_configs (
+  key text primary key,
+  config jsonb,
+  updated_by text,
+  updated_at timestamptz default now()
+);
+
+alter table public.page_configs add column if not exists config jsonb;
+alter table public.page_configs add column if not exists updated_by text;
+alter table public.page_configs add column if not exists updated_at timestamptz default now();
 
 -- Imported rows (JSON per row)
 create table if not exists public.dataset_rows (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { formatCell } from '@/lib/typeDetect';
 
 function collectColumns(rows, maxRows = 50) {
   const keys = new Set();
@@ -11,7 +12,7 @@ function collectColumns(rows, maxRows = 50) {
   return Array.from(keys);
 }
 
-export default function DatasetViewer({ dataset, title }) {
+export default function DatasetViewer({ dataset, title, rowLinkBase = null }) {
   const [data, setData] = useState({ import: null, schema: null, rows: [] });
   const [err, setErr] = useState('');
 
@@ -43,57 +44,11 @@ export default function DatasetViewer({ dataset, title }) {
     return data?.schema?.column_types || data?.import?.column_types || {};
   }, [data.schema, data.import]);
 
-  function excelSerialToDate(serial) {
-    const n = Number(serial);
-    if (!Number.isFinite(n)) return null;
-    // Excel epoch (1899-12-30)
-    const ms = Math.round((n - 25569) * 86400 * 1000);
-    const d = new Date(ms);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
+  const labelMap = useMemo(() => {
+    return data?.schema?.column_labels || {};
+  }, [data.schema]);
 
-  function formatCell(val, type) {
-    if (val == null) return '';
-    const t = String(type || 'text');
-
-    if (t === 'leer') return '';
-
-    if (t === 'number') {
-      const n = typeof val === 'number' ? val : Number(String(val).replace(',', '.'));
-      if (Number.isFinite(n)) return String(n);
-      return String(val);
-    }
-
-    if (t === 'boolean') {
-      const s = String(val).trim().toLowerCase();
-      const yes = ['1', 'true', 'yes', 'ja', 'j', 'x'].includes(s);
-      const no = ['0', 'false', 'no', 'nein', 'n', ''].includes(s);
-      if (typeof val === 'boolean') return val ? 'ja' : 'nein';
-      if (yes) return 'ja';
-      if (no) return 'nein';
-      return String(val);
-    }
-
-    if (t === 'date_excel') {
-      const d = excelSerialToDate(val);
-      if (!d) return String(val);
-      return d.toLocaleDateString();
-    }
-
-    if (t === 'date') {
-      const d = new Date(val);
-      if (!Number.isNaN(d.getTime())) return d.toLocaleDateString();
-      // If it's a number and looks like Excel, try Excel conversion
-      const n = Number(val);
-      if (Number.isFinite(n) && n > 20000 && n < 70000) {
-        const dd = excelSerialToDate(n);
-        if (dd) return dd.toLocaleDateString();
-      }
-      return String(val);
-    }
-
-    return String(val);
-  }
+  const effectiveRowLinkBase = rowLinkBase || (dataset === 'dealers' ? '/dealers' : null);
 
   if (err) {
     return (
@@ -125,17 +80,23 @@ export default function DatasetViewer({ dataset, title }) {
 
       {data.rows?.length ? (
         <div className="card" style={{ overflowX: 'auto' }}>
-          <table className="table" style={{ minWidth: 600 }}>
+          <table className="table" style={{ minWidth: effectiveRowLinkBase ? 720 : 600 }}>
             <thead>
               <tr>
                 <th style={{ width: 60 }}>#</th>
-                {cols.map((c) => <th key={c}>{c}</th>)}
+                {effectiveRowLinkBase ? <th style={{ width: 110 }}>Öffnen</th> : null}
+                {cols.map((c) => <th key={c}>{(labelMap?.[c] || '').trim() || c}</th>)}
               </tr>
             </thead>
             <tbody>
               {data.rows.map((r) => (
                 <tr key={r.row_index}>
                   <td className="muted">{r.row_index + 1}</td>
+                  {effectiveRowLinkBase ? (
+                    <td>
+                      <a className="secondary" href={`${effectiveRowLinkBase}/${r.row_index}`} style={{ textDecoration: 'none', padding: '6px 10px', fontSize: 12 }}>Details</a>
+                    </td>
+                  ) : null}
                   {cols.map((c) => (
                     <td key={c}>{formatCell((r.row_data || {})[c], typeMap?.[c])}</td>
                   ))}

@@ -79,3 +79,22 @@ Für die neuen Schema-Funktionen brauchst du die aktualisierten Import-Tabellen:
 - Im Admin → Installer: Beispiel **03 import tables** erneut ausführen (idempotent)
   - fügt `dataset_schemas` hinzu
   - ergänzt `dataset_imports` um `column_types` + `save_schema`
+
+## UI/Apps Updates (2026-02-15.5)
+
+- Globaler Header: **Zurück** + **Home** oben links (immer sichtbar, ohne Scrollen).
+- Admin → Dataset Einstellungen:
+  - Spalten **Reihenfolge** ändern (↑/↓)
+  - Spalten **Labels** (Überschriften) setzen
+  - Rückstand: **Zusatzinfos per Join** aus Händler/Lager als neue Spalten hinzufügen (Alias + Label + Typ)
+  - Lager: **Standard-Ansicht** (Kacheln/Liste) + Gruppierung (z.B. nach Modell)
+- Lagerseite `/inventory`: neue **Kachel-Ansicht** (responsive Grid, keine horizontale Scrollbar).
+- Händler-Detailseite `/dealers/[id]`:
+  - zeigt Händlerdaten + optional Rückstand dieses Händlers
+  - Admin → **Händlerseite** (`/admin/dealer-view`) konfiguriert Keys + angezeigte Spalten
+
+### SQL-Änderung
+
+Für Join/Labels/Views + Händlerseite braucht `supabase/import_tables.sql` erneut auszuführen (idempotent):
+- `dataset_schemas` bekommt neue Spalten: `column_labels`, `joins`, `view_config`
+- neue Tabelle: `page_configs` (z.B. `dealer_view`)

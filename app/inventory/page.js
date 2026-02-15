@@ -1,5 +1,5 @@
-import DatasetViewer from '@/app/ui/DatasetViewer';
+import InventoryBoard from '@/app/ui/InventoryBoard';
 
 export default function Page() {
-  return <DatasetViewer dataset="inventory" title="Lagerbestand" />;
+  return <InventoryBoard />;
 }
