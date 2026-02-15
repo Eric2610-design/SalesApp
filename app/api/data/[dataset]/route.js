@@ -20,7 +20,7 @@ export async function GET(req, ctx) {
 
   const { data: imp, error: impErr } = await admin
     .from('dataset_imports')
-    .select('id,dataset,filename,row_count,created_at,created_by')
+    .select('id,dataset,filename,row_count,inserted_count,status,selected_columns,display_columns,created_at,created_by')
     .eq('dataset', dataset)
     .order('created_at', { ascending: false })
     .limit(1);

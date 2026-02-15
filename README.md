@@ -14,7 +14,7 @@ Pflicht:
 - ADMIN_EMAILS (CSV) z.B. `e.fuhrmann@flyer-bikes.com,ceo@flyer-bikes.com`
 
 Optional:
-- ADMIN_ACTIONS_KEY (wenn gesetzt, verlangt der Installer diesen Key)
+- ADMIN_ACTIONS_KEY (wenn gesetzt, verlangen Setup/„Alles löschen“-Aktionen diesen Key)
 - DEFAULT_GROUP (default: Aussendienst)
 
 ## Supabase SQL (Reihenfolge)
@@ -22,6 +22,9 @@ Optional:
 1) `supabase/core_users.sql` (user_groups + app_users minimal)
 2) `supabase/admin_exec_sql.sql` (Installer: exec_sql Funktion)
 3) `supabase/apps_registry.sql` (Apps + Dock + Visibility)
+4) `supabase/import_tables.sql` (Datenimport + Admin-Log)
+
+Hinweis: Im Installer gibt es dafür Beispiel-SQLs (oben rechts „Beispiele“).
 
 ## Admin-Regel
 
@@ -37,6 +40,23 @@ Optional:
 
 ## UI/Apps Updates (2026-02-15.2)
 
-- Home/Desktop: Alle Admin-Unterseiten (/admin/*) werden zu einer einzigen Kachel **Admin** zusammengefasst.
+- Home/Desktop: Alle Admin-Unterseiten (`/admin/*`) werden zu einer einzigen Kachel **Admin** zusammengefasst.
 - Neue Admin-Startseite `/admin` (Apps, Installer, Benutzer, Datenimport).
 - Admin → Datenimport: CSV/XLSX Upload in generische Import-Tabellen (`dataset_imports`, `dataset_rows`).
+
+## UI/Apps Updates (2026-02-15.3)
+
+- Admin → Datenimport:
+  - Datei wird **vor dem Import analysiert** (Spalten, Typ, Füllgrad, Beispiele)
+  - Du wählst **Import-Spalten** und **Anzeigespalten** (Anzeige ⊆ Import)
+  - Import läuft in **Chunks mit Fortschrittsanzeige**
+  - „Letzten Import löschen“ + „Alle Imports dieses Datasets löschen“
+- Admin → Log (`/admin/log`):
+  - zeichnet die letzten Admin-Aktionen auf
+  - wo möglich, mit **Rückgängig** (z.B. Import rollback, App aktiv/inaktiv, App restore nach Delete)
+
+### Setup-Hinweis
+
+Wenn Import/Log Fehler wie „relation … does not exist“ melden:
+- Admin → Datenimport → **Setup: Import-Tabellen + Admin-Log**
+- oder im Admin → Installer das Beispiel **03 import tables** ausführen.

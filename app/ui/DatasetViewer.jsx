@@ -31,7 +31,11 @@ export default function DatasetViewer({ dataset, title }) {
     return () => { alive = false; };
   }, [dataset]);
 
-  const cols = useMemo(() => collectColumns(data.rows), [data.rows]);
+  const cols = useMemo(() => {
+    const dc = data?.import?.display_columns;
+    if (Array.isArray(dc) && dc.length) return dc;
+    return collectColumns(data.rows);
+  }, [data.rows, data.import]);
 
   if (err) {
     return (
@@ -50,12 +54,13 @@ export default function DatasetViewer({ dataset, title }) {
         <div className="h1">{title}</div>
         <div className="sub">
           {data.import
-            ? <>Letzter Import: <strong>{data.import.filename || 'Datei'}</strong> · {data.import.row_count} Zeilen</>
+            ? <>Letzter Import: <strong>{data.import.filename || 'Datei'}</strong> · {data.import.inserted_count ?? data.import.row_count} Zeilen</>
             : <>Noch keine Daten. Importiere über <a href="/admin/import">Admin → Datenimport</a>.</>}
         </div>
         {data.import ? (
           <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
             {new Date(data.import.created_at).toLocaleString()} · {data.import.created_by || ''}
+            {data.import.status && data.import.status !== 'done' ? <> · Status: <strong>{data.import.status}</strong></> : null}
           </div>
         ) : null}
       </div>

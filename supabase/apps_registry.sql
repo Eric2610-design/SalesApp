@@ -37,7 +37,8 @@ values
   ('admin-installer','Installer','🛠️','/admin/installer',95,true),
   ('admin-apps','Admin Apps','🧩','/admin/apps',96,true),
   ('admin-users','Benutzer','👥','/admin/users',97,true),
-  ('admin-import','Datenimport','⬆️','/admin/import',98,true)
+  ('admin-import','Datenimport','⬆️','/admin/import',98,true),
+  ('admin-log','Log','🧾','/admin/log',99,true)
 on conflict (slug) do nothing;
 
 -- Visible for CEO/AD

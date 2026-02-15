@@ -6,7 +6,8 @@ const ADMIN_TILES = [
   { title: 'Apps', icon: '🧩', href: '/admin/apps', sub: 'Registry, aktiv/inaktiv, löschen' },
   { title: 'Installer', icon: '🛠️', href: '/admin/installer', sub: 'SQL ausführen / Setup' },
   { title: 'Benutzer', icon: '👥', href: '/admin/users', sub: 'Gruppen & Profile' },
-  { title: 'Datenimport', icon: '⬆️', href: '/admin/import', sub: 'CSV/XLSX hochladen' }
+  { title: 'Datenimport', icon: '⬆️', href: '/admin/import', sub: 'CSV/XLSX hochladen' },
+  { title: 'Log', icon: '🧾', href: '/admin/log', sub: 'Letzte Admin-Aktionen' }
 ];
 
 export default function AdminHomePage() {

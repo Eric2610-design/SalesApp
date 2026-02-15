@@ -1,17 +1,31 @@
--- Generic Import Tables (CSV/XLSX)
+-- Generic Import Tables (CSV/XLSX) + Admin Audit Log
 
 create extension if not exists pgcrypto;
 
+-- Import runs
 create table if not exists public.dataset_imports (
   id uuid primary key default gen_random_uuid(),
   dataset text not null,
   filename text,
   mimetype text,
   row_count int default 0,
+  inserted_count int default 0,
+  status text default 'done',
+  selected_columns jsonb,
+  display_columns jsonb,
+  schema_guess jsonb,
   created_by text,
   created_at timestamptz default now()
 );
 
+-- Ensure newer columns exist even on older installs
+alter table public.dataset_imports add column if not exists inserted_count int default 0;
+alter table public.dataset_imports add column if not exists status text default 'done';
+alter table public.dataset_imports add column if not exists selected_columns jsonb;
+alter table public.dataset_imports add column if not exists display_columns jsonb;
+alter table public.dataset_imports add column if not exists schema_guess jsonb;
+
+-- Imported rows (JSON per row)
 create table if not exists public.dataset_rows (
   id bigserial primary key,
   import_id uuid references public.dataset_imports(id) on delete cascade,
@@ -23,3 +37,18 @@ create table if not exists public.dataset_rows (
 
 create index if not exists dataset_rows_dataset_idx on public.dataset_rows(dataset);
 create index if not exists dataset_rows_import_idx on public.dataset_rows(import_id);
+
+-- Admin audit log (who did what, when)
+create table if not exists public.admin_audit_log (
+  id bigserial primary key,
+  actor_email text,
+  action text not null,
+  target text,
+  payload jsonb,
+  undo jsonb,
+  undone_at timestamptz,
+  undone_by text,
+  created_at timestamptz default now()
+);
+
+create index if not exists admin_audit_log_created_at_idx on public.admin_audit_log(created_at desc);
