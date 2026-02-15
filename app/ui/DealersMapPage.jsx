@@ -173,24 +173,24 @@ export default function DealersMapPage() {
           <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
             {visible.slice(0, 250).map((m) => (
               <div key={m.id} className="card" style={{ padding: 12 }}>
-                <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'grid', gap: 4 }}>
-                    <div style={{ fontWeight: 900 }}>{m.name}</div>
-                    <div className="muted" style={{ fontSize: 12 }}>{[m.zip, m.city].filter(Boolean).join(' ')}</div>
-                  </div>
-                  <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <div className="row" style={{ gap: 6, alignItems: 'center' }}>
-                      <div className="row" style={{ gap: 6 }}>
-                        {(m.manufacturer_keys || []).slice(0, 6).map((k) => (
-                          <Logo key={k} src={mIconByKey.get(String(k).toLowerCase())} alt={k} />
-                        ))}
-                      </div>
-                      {m.buying_group_key ? <Logo src={bgIconByKey.get(String(m.buying_group_key).toLowerCase())} alt={m.buying_group_key} /> : null}
-                    </div>
-                    {m.hasBacklog ? <span className="muted" style={{ fontSize: 12 }}>Rückstand</span> : null}
-                    <a className="secondary" href={`/dealers/${m.id}`} style={{ textDecoration: 'none', padding: '8px 10px', fontSize: 12 }}>Details</a>
-                  </div>
-                </div>
+	                <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', alignItems: 'center', gap: 10 }}>
+	                  <div style={{ display: 'grid', gap: 4, minWidth: 0 }}>
+	                    <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+	                      <div style={{ fontWeight: 900, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.name}</div>
+	                      <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+	                        {(m.manufacturer_keys || []).slice(0, 6).map((k) => (
+	                          <Logo key={k} src={mIconByKey.get(String(k).toLowerCase())} alt={k} />
+	                        ))}
+	                      </div>
+	                    </div>
+	                    <div className="muted" style={{ fontSize: 12 }}>{[m.zip, m.city].filter(Boolean).join(' ')}</div>
+	                  </div>
+	                  <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
+	                    {m.buying_group_key ? <Logo src={bgIconByKey.get(String(m.buying_group_key).toLowerCase())} alt={m.buying_group_key} /> : null}
+	                    {m.hasBacklog ? <span className="muted" style={{ fontSize: 12 }}>Rückstand</span> : null}
+	                    <a className="secondary" href={`/dealers/${m.id}`} style={{ textDecoration: 'none', padding: '8px 10px', fontSize: 12 }}>Details</a>
+	                  </div>
+	                </div>
               </div>
             ))}
 

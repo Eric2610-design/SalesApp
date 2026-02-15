@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getMeFromRequest } from '@/lib/authServer';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { parsePlzFilter, pickZipFromRow, zipAllowed } from '@/lib/territory';
 
 export const dynamic = 'force-dynamic';
 
 function normKey(v) {
   if (v == null) return '';
-  return String(v).trim().toLowerCase();
+  let s = (typeof v === 'number') ? String(v) : String(v);
+  s = s.trim();
+  if (/^\d+\.0+$/.test(s)) s = s.replace(/\.0+$/, '');
+  return s.toLowerCase();
 }
 
 function slugKey(v) {
@@ -337,6 +341,11 @@ export async function GET(req) {
   const me = await getMeFromRequest(req);
   if (me.status !== 200) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
 
+  const effectiveIsAdmin = (typeof me.effectiveIsAdmin === 'boolean') ? me.effectiveIsAdmin : me.isAdmin;
+  const effectiveProfile = me.effectiveProfile || me.profile;
+  const plzRules = parsePlzFilter(String(effectiveProfile?.plz_filter || ''));
+  const restrictByPlz = !effectiveIsAdmin && plzRules.length;
+
   const url = new URL(req.url);
   const onlyBacklog = url.searchParams.get('onlyBacklog') === '1';
 
@@ -399,11 +408,34 @@ export async function GET(req) {
 
     // Dealers
     const dealerRows = await fetchAllRows(admin, dealersImp.id, 1200, 40000);
+
+    // Manual overrides (optional table)
+    const overrides = new Map();
+    try {
+      const { data: ovr, error: ovrErr } = await admin
+        .from('dealer_brand_overrides')
+        .select('dealer_key,manufacturer_keys,buying_group_key')
+        .limit(10000);
+      if (ovrErr) throw new Error(ovrErr.message);
+      for (const r of ovr || []) {
+        const k = normKey(r?.dealer_key);
+        if (k) overrides.set(k, r);
+      }
+    } catch {
+      // ignore if not installed
+    }
+
     const markers = [];
     let noCoords = 0;
 
     for (const r of dealerRows) {
       const obj = r?.row_data || {};
+
+      if (restrictByPlz) {
+        const z = pickZipFromRow(obj);
+        if (!zipAllowed(z, plzRules)) continue;
+      }
+
       const coords = findLatLng(obj, finalLatKey ? [finalLatKey] : [], finalLngKey ? [finalLngKey] : []);
       if (!isLat(coords.lat) || !isLng(coords.lng)) {
         noCoords++;
@@ -413,14 +445,26 @@ export async function GET(req) {
       const hasBacklog = dVal ? backlogSet.has(dVal) : false;
       if (onlyBacklog && !hasBacklog) continue;
 
+      let manufacturer_keys = parseBrandKeys(obj, brandsCfg);
+      let buying_group_key = parseBuyingGroupKey(obj, brandsCfg);
+      const o = dVal ? overrides.get(dVal) : null;
+      if (o) {
+        const oM = Array.isArray(o?.manufacturer_keys) ? o.manufacturer_keys : [];
+        const merged = [...oM, ...(manufacturer_keys || [])]
+          .map((x) => String(x || '').trim().toLowerCase())
+          .filter(Boolean);
+        manufacturer_keys = Array.from(new Set(merged));
+        if (o?.buying_group_key) buying_group_key = String(o.buying_group_key || '').trim().toLowerCase();
+      }
+
       markers.push({
         id: r.row_index,
         name: pickName(r),
         lat: coords.lat,
         lng: coords.lng,
         hasBacklog,
-        manufacturer_keys: parseBrandKeys(obj, brandsCfg),
-        buying_group_key: parseBuyingGroupKey(obj, brandsCfg),
+        manufacturer_keys,
+        buying_group_key,
         // a few helpful fields for the list (optional)
         city: obj?.Ort ?? obj?.City ?? obj?.city ?? null,
         zip: obj?.PLZ ?? obj?.Zip ?? obj?.zip ?? null

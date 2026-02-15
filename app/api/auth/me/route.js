@@ -12,6 +12,10 @@ export async function GET(req) {
     user: me.user,
     profile: me.profile,
     group: me.group,
-    isAdmin: me.isAdmin
+    isAdmin: me.isAdmin,
+    effectiveProfile: me.effectiveProfile || me.profile,
+    effectiveGroup: me.effectiveGroup || me.group,
+    effectiveIsAdmin: (typeof me.effectiveIsAdmin === 'boolean') ? me.effectiveIsAdmin : me.isAdmin,
+    impersonating: me.impersonating || null
   });
 }

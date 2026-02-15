@@ -21,6 +21,7 @@ export default function AdminUsersPage() {
   const [cGroup, setCGroup] = useState('');
   const [cCountry, setCCountry] = useState('');
   const [cAdKey, setCAdKey] = useState('');
+  const [cPlzFilter, setCPlzFilter] = useState('');
   const [createdInfo, setCreatedInfo] = useState(null); // {email,password}
 
   async function load() {
@@ -81,7 +82,8 @@ export default function AdminUsersPage() {
           password: cPass.trim() || null,
           group_id: cGroup || null,
           country_code: cCountry.trim() || null,
-          ad_key: cAdKey.trim() || null
+          ad_key: cAdKey.trim() || null,
+          plz_filter: cPlzFilter.trim() || null
         })
       });
       const j = await res.json().catch(() => ({}));
@@ -95,6 +97,7 @@ export default function AdminUsersPage() {
       setCGroup('');
       setCCountry('');
       setCAdKey('');
+      setCPlzFilter('');
 
       await load();
     } catch (e) {
@@ -122,6 +125,25 @@ export default function AdminUsersPage() {
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(j?.error || 'Löschen fehlgeschlagen');
       await load();
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function viewAs(u) {
+    setBusyId(u.user_id);
+    setErr('');
+    try {
+      const res = await fetch('/api/admin/impersonate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ user_id: u.user_id })
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || 'Fehler');
+      window.location.href = '/';
     } catch (e) {
       setErr(e?.message || String(e));
     } finally {
@@ -215,6 +237,21 @@ export default function AdminUsersPage() {
             <div className="label">AD Key</div>
             <input className="input" value={cAdKey} onChange={(e) => setCAdKey(e.target.value)} placeholder="(optional)" />
           </div>
+
+          <div style={{ minWidth: 260, flexBasis: '100%' }}>
+            <div className="label">PLZ-Filter (optional)</div>
+            <textarea
+              className="input"
+              value={cPlzFilter}
+              onChange={(e) => setCPlzFilter(e.target.value)}
+              placeholder="Beispiele: 6\n60,61,62\n20000-29999"
+              rows={2}
+              style={{ resize: 'vertical' }}
+            />
+            <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+              Sichtbarkeit für Außendienst: Prefixe (z.B. 6 / 60 / 60311) oder Bereiche (z.B. 20000-29999).
+            </div>
+          </div>
         </div>
 
         {createdInfo ? (
@@ -248,8 +285,9 @@ export default function AdminUsersPage() {
               <th>Gruppe</th>
               <th>Land</th>
               <th>AD Key</th>
+              <th style={{ minWidth: 220 }}>PLZ-Filter</th>
               <th className="muted">Auth</th>
-              <th style={{ width: 120 }}>Aktionen</th>
+              <th style={{ width: 220 }}>Aktionen</th>
             </tr>
           </thead>
           <tbody>
@@ -310,8 +348,33 @@ export default function AdminUsersPage() {
                     placeholder="(optional)"
                   />
                 </td>
+                <td style={{ minWidth: 220 }}>
+                  <textarea
+                    className="input"
+                    value={u.plz_filter || ''}
+                    disabled={busyId === u.user_id}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setUsers((prev) => prev.map(x => x.user_id === u.user_id ? { ...x, plz_filter: v } : x));
+                    }}
+                    onBlur={(e) => patch(u.user_id, { plz_filter: e.target.value })}
+                    rows={2}
+                    style={{ resize: 'vertical' }}
+                    placeholder="z.B. 6, 60-69"
+                  />
+                </td>
                 <td className="muted" style={{ fontSize: 12 }}>{u.auth_user_id ? '✓' : '—'}</td>
                 <td>
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => viewAs(u)}
+                    disabled={busyId === u.user_id}
+                    style={{ marginRight: 8 }}
+                    title="Ansicht als dieser Benutzer öffnen"
+                  >
+                    Ansicht
+                  </button>
                   <button
                     className="secondary"
                     type="button"

@@ -1,7 +1,10 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useEffect, useMemo, useState } from 'react';
 import { formatCell } from '@/lib/typeDetect';
+
+const DealerMiniMapLeaflet = dynamic(() => import('./DealerMiniMapLeaflet'), { ssr: false });
 
 function pickName(row) {
   const obj = row?.row_data || {};
@@ -145,34 +148,59 @@ export default function DealerDetail({ id }) {
   const manufacturerKeys = Array.isArray(data?.brands?.manufacturer_keys) ? data.brands.manufacturer_keys : [];
   const buyingGroupKey = data?.brands?.buying_group_key ? String(data.brands.buying_group_key) : '';
 
+  const coords = data?.coords || {};
+  const iconSrc = (() => {
+    const mk = (manufacturerKeys || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
+    if (!mk.length) return '';
+    if (mk.includes('flyer')) return mIconByKey.get('flyer') || '';
+    return mIconByKey.get(mk[0]) || '';
+  })();
+
   return (
     <div style={{ display: 'grid', gap: 14 }}>
       <div className="card">
         <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <div>
-            <div className="h1">{title}</div>
+	            <div className="row" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+	              <div className="h1">{title}</div>
+	              <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+	                {manufacturerKeys.slice(0, 10).map((k) => (
+	                  <Logo key={k} src={mIconByKey.get(String(k).toLowerCase())} alt={k} />
+	                ))}
+	              </div>
+	            </div>
             <div className="sub">
               Händler-Detailseite · ID {Number(dealer?.row_index ?? 0) + 1}
               {cfg?.dealer_key ? <span> · Key: <strong>{cfg.dealer_key}</strong></span> : null}
             </div>
           </div>
 
-          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-            <div className="row" style={{ gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-              {manufacturerKeys.slice(0, 10).map((k) => (
-                <Logo key={k} src={mIconByKey.get(String(k).toLowerCase())} alt={k} />
-              ))}
-            </div>
-            {buyingGroupKey ? (
-              <Logo src={bgIconByKey.get(String(buyingGroupKey).toLowerCase())} alt={buyingGroupKey} />
-            ) : null}
-          </div>
+	          <div className="row" style={{ gap: 10, alignItems: 'center' }}>
+	            {buyingGroupKey ? (
+	              <Logo src={bgIconByKey.get(String(buyingGroupKey).toLowerCase())} alt={buyingGroupKey} />
+	            ) : null}
+	          </div>
         </div>
         <div className="row" style={{ marginTop: 12, flexWrap: 'wrap' }}>
           <a className="secondary" href="/database" style={{ textDecoration: 'none' }}>Zur Händlerliste</a>
           <a className="secondary" href="/backlog" style={{ textDecoration: 'none' }}>Zum Rückstand</a>
         </div>
       </div>
+
+	      {Number.isFinite(coords?.lat) && Number.isFinite(coords?.lng) ? (
+	        <div className="card">
+	          <div style={{ fontWeight: 900, marginBottom: 10 }}>Standort</div>
+	          <DealerMiniMapLeaflet lat={coords.lat} lng={coords.lng} iconSrc={iconSrc} height={220} />
+	          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+	            {coords?.latKey || coords?.lngKey ? (
+	              <>
+	                Quelle: <strong>{coords.latKey || '—'}</strong>/<strong>{coords.lngKey || '—'}</strong>
+	                <span className="muted"> ({coords.latKey_source || '—'}/{coords.lngKey_source || '—'})</span>
+	              </>
+	            ) : null}
+	          </div>
+	        </div>
+	      ) : null}
 
       <div className="card" style={{ overflowX: 'auto' }}>
         <div style={{ fontWeight: 900, marginBottom: 10 }}>Händlerdaten</div>

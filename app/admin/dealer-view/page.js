@@ -20,8 +20,9 @@ export default function AdminDealerViewPage() {
   const [backlogCols, setBacklogCols] = useState([]);
 
   const [cfg, setCfg] = useState({
-    dealer_key: '',
-    backlog_key: '',
+    // Default: Kundennummer (passt zu deiner Kundendatei)
+    dealer_key: 'Kundennummer',
+    backlog_key: 'Kundennummer',
     backlog_enabled: true,
     backlog_group_enabled: false,
     backlog_group_by: '',

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 
@@ -10,6 +10,28 @@ function markerIcon(hasBacklog) {
     html: `<div style="width:16px;height:16px;border-radius:999px;border:2px solid rgba(15,23,42,.55);background:${hasBacklog ? 'rgba(239,68,68,.9)' : 'rgba(59,130,246,.85)'};box-shadow:0 8px 18px rgba(15,23,42,.18)"></div>`,
     iconSize: [16, 16],
     iconAnchor: [8, 8]
+  });
+}
+
+function logoMarkerIcon(src, hasBacklog) {
+  const ring = hasBacklog ? 'rgba(239,68,68,.95)' : 'rgba(15,23,42,.65)';
+  const safeSrc = String(src || '');
+  return L.divIcon({
+    className: '',
+    html: `
+      <div style="
+        width: 34px; height: 34px; border-radius: 999px;
+        background: rgba(255,255,255,0.95);
+        border: 2px solid ${ring};
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 8px 22px rgba(15,23,42,.18);
+      ">
+        <img src="${safeSrc}" alt="" style="width: 20px; height: 20px; object-fit: contain;" />
+      </div>
+    `.trim(),
+    iconSize: [34, 34],
+    iconAnchor: [17, 34],
+    popupAnchor: [0, -34]
   });
 }
 
@@ -47,8 +69,27 @@ export default function DealersMapLeaflet({ markers, brands, onBounds, height = 
     return [51.163, 10.447];
   }, []);
 
+  const iconCache = useRef(new Map());
+
   const mIconByKey = brands?.mIconByKey;
   const bgIconByKey = brands?.bgIconByKey;
+
+  function getIcon(m) {
+    const mk = (m?.manufacturer_keys || []).map((x) => String(x || '').trim().toLowerCase()).filter(Boolean);
+    const hasFlyer = mk.includes('flyer');
+
+    let src = '';
+    if (hasFlyer && mIconByKey?.get) src = mIconByKey.get('flyer') || '';
+    if (!src && mk.length && mIconByKey?.get) src = mIconByKey.get(mk[0]) || '';
+
+    if (!src) return markerIcon(!!m?.hasBacklog);
+
+    const key = `${src}|${m?.hasBacklog ? 'b' : 'n'}`;
+    if (iconCache.current.has(key)) return iconCache.current.get(key);
+    const ic = logoMarkerIcon(src, !!m?.hasBacklog);
+    iconCache.current.set(key, ic);
+    return ic;
+  }
 
   function Logo({ src, alt }) {
     if (!src) return null;
@@ -69,7 +110,7 @@ export default function DealersMapLeaflet({ markers, brands, onBounds, height = 
           <FitToMarkers markers={markers} />
 
           {(markers || []).slice(0, 5000).map((m) => (
-            <Marker key={m.id} position={[m.lat, m.lng]} icon={markerIcon(m.hasBacklog)}>
+            <Marker key={m.id} position={[m.lat, m.lng]} icon={getIcon(m)}>
               <Popup>
                 <div style={{ display: 'grid', gap: 6, minWidth: 180 }}>
                   <div style={{ fontWeight: 900 }}>{m.name}</div>

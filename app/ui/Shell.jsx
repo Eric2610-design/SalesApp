@@ -35,6 +35,13 @@ export default function Shell({ children }) {
     return () => clearInterval(t);
   }, []);
 
+  async function stopImpersonation() {
+    try {
+      await fetch('/api/admin/impersonate', { method: 'DELETE' });
+    } catch {}
+    window.location.href = '/';
+  }
+
   useEffect(() => {
     let alive = true;
     fetchMe().then((m) => alive && setMe(m)).catch(() => alive && setMe(null));
@@ -63,6 +70,13 @@ export default function Shell({ children }) {
           </form>
 
           <div className="ios-status-right">
+            {me?.impersonating ? (
+              <div className="ios-impersonate" title="Ansicht als anderer Benutzer">
+                <span>Ansicht:</span>
+                <strong>{me.impersonating.display_name || me.impersonating.email || me.impersonating.user_id}</strong>
+                <button type="button" className="ios-impersonate-btn" onClick={stopImpersonation}>Beenden</button>
+              </div>
+            ) : null}
             <div className="ios-mini">{clock.date} · {clock.time}</div>
             {authed ? (
               <a className="ios-avatar" href="/settings" title="Einstellungen">⚙️</a>

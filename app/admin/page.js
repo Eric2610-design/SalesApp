@@ -6,6 +6,7 @@ const ADMIN_TILES = [
   { title: 'Apps', icon: '🧩', href: '/admin/apps', sub: 'Registry, aktiv/inaktiv, löschen' },
   { title: 'Installer', icon: '🛠️', href: '/admin/installer', sub: 'SQL ausführen / Setup' },
   { title: 'Benutzer', icon: '👥', href: '/admin/users', sub: 'Gruppen & Profile' },
+  { title: 'Händler-Zuordnungen', icon: '📌', href: '/admin/dealer-brands', sub: 'Hersteller/Einkaufsverband pro Händler (Bulk: alle → Flyer)' },
   { title: 'Datenimport', icon: '⬆️', href: '/admin/import', sub: 'CSV/XLSX hochladen' },
   { title: 'Dataset Einstellungen', icon: '🧱', href: '/admin/datasets', sub: 'Spalten + Typen + Vorschau' },
   { title: 'Händlerseite', icon: '🏪', href: '/admin/dealer-view', sub: 'Welche Infos auf der Händlerseite' },

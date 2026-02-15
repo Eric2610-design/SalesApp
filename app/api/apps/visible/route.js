@@ -42,6 +42,9 @@ export async function GET(req) {
   const me = await getMeFromRequest(req);
   if (me.status !== 200) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+  const effectiveIsAdmin = (typeof me.effectiveIsAdmin === 'boolean') ? me.effectiveIsAdmin : me.isAdmin;
+  const effectiveProfile = me.effectiveProfile || me.profile;
+
   const admin = getSupabaseAdmin();
 
   if (me.isAdmin) {
@@ -58,9 +61,9 @@ export async function GET(req) {
   if (appsErr) return NextResponse.json({ error: appsErr.message }, { status: 500 });
 
   let apps = allApps || [];
-  const groupId = me.profile?.group_id;
+  const groupId = effectiveProfile?.group_id;
 
-  if (!me.isAdmin) {
+  if (!effectiveIsAdmin) {
     if (!groupId) apps = [];
     else {
       const { data: vis, error: visErr } = await admin
@@ -83,6 +86,11 @@ export async function GET(req) {
     return !href.startsWith('/admin/');
   });
 
+  // Never show /admin (root) to non-admin effective view.
+  if (!effectiveIsAdmin) {
+    apps = apps.filter(a => String(a?.href || '') !== '/admin');
+  }
+
   let dock = [];
   if (groupId) {
     const { data: fav, error: favErr } = await admin
@@ -94,6 +102,7 @@ export async function GET(req) {
     if (!favErr && fav) {
       dock = dedupeApps(fav.map(r => r.apps).filter(Boolean).filter(a => a.is_enabled));
       dock = dock.filter(a => !String(a?.href || '').startsWith('/admin/'));
+      if (!effectiveIsAdmin) dock = dock.filter(a => String(a?.href || '') !== '/admin');
     }
   }
 

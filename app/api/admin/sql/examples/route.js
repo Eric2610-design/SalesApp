@@ -18,7 +18,9 @@ export async function GET(req) {
     { name: '01 exec_sql function', file: 'admin_exec_sql.sql' },
     { name: '02 apps registry', file: 'apps_registry.sql' },
     { name: '03 import tables', file: 'import_tables.sql' },
-    { name: '04 manufacturers + buying groups', file: 'brands.sql' }
+    { name: '04 manufacturers + buying groups', file: 'brands.sql' },
+    { name: '05 dealer brand overrides', file: 'dealer_brand_overrides.sql' },
+    { name: '06 user territories', file: 'user_territories.sql' }
   ];
 
   const examples = [];

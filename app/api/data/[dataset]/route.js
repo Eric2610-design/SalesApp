@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getMeFromRequest } from '@/lib/authServer';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+import { parsePlzFilter, pickZipFromRow, zipAllowed } from '@/lib/territory';
 
 export const dynamic = 'force-dynamic';
 
@@ -88,6 +89,9 @@ export async function GET(req, ctx) {
   const me = await getMeFromRequest(req);
   if (me.status !== 200) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
+  const effectiveIsAdmin = (typeof me.effectiveIsAdmin === 'boolean') ? me.effectiveIsAdmin : me.isAdmin;
+  const effectiveProfile = me.effectiveProfile || me.profile;
+
   const dataset = String(ctx?.params?.dataset || '').trim();
   if (!ALLOWED.has(dataset)) return NextResponse.json({ error: 'Invalid dataset' }, { status: 400 });
 
@@ -95,6 +99,10 @@ export async function GET(req, ctx) {
   const limit = Math.min(500, Math.max(1, Number(url.searchParams.get('limit') || 200)));
 
   const admin = getSupabaseAdmin();
+
+  // Territory restriction for ADs (by PLZ)
+  const plzRules = parsePlzFilter(String(effectiveProfile?.plz_filter || ''));
+  const shouldRestrict = !effectiveIsAdmin && plzRules.length;
 
   // Optional: dataset schema overrides (display columns + type overrides)
   const { data: schemaRows } = await admin
@@ -115,11 +123,47 @@ export async function GET(req, ctx) {
 
   let rows = [];
   try {
-    rows = await getRowsForImport(admin, latest.id, limit);
+    const fetchLimit = shouldRestrict ? Math.min(20000, Math.max(limit * 40, 2000)) : limit;
+    rows = await getRowsForImport(admin, latest.id, fetchLimit);
     rows = await applyJoins(admin, dataset, rows, schema);
   } catch (e) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 });
   }
+
+  if (shouldRestrict) {
+    if (dataset === 'dealers') {
+      rows = rows.filter((r) => zipAllowed(pickZipFromRow(r?.row_data), plzRules));
+    }
+    if (dataset === 'backlog') {
+      // determine dealer key fields from page config
+      const { data: cfgRows } = await admin
+        .from('page_configs')
+        .select('key,value')
+        .eq('key', 'dealer_view')
+        .limit(1);
+      const dealerCfg = cfgRows?.[0]?.value || {};
+      const dealerKey = String(dealerCfg?.dealerKey || '').trim() || 'Kundennummer';
+      const backlogKey = String(dealerCfg?.backlogDealerKey || '').trim() || dealerKey;
+
+      const dealersImp = await getLatestImport(admin, 'dealers').catch(() => null);
+      if (dealersImp?.id) {
+        const dealerRows = await getRowsForImport(admin, dealersImp.id, 30000).catch(() => []);
+        const allowed = new Set();
+        for (const dr of dealerRows || []) {
+          const zip = pickZipFromRow(dr?.row_data);
+          if (!zipAllowed(zip, plzRules)) continue;
+          const k = normKey((dr?.row_data || {})[dealerKey]);
+          if (k) allowed.add(k);
+        }
+        rows = rows.filter((r) => {
+          const k = normKey((r?.row_data || {})[backlogKey]);
+          return k && allowed.has(k);
+        });
+      }
+    }
+  }
+
+  rows = rows.slice(0, limit);
 
   return NextResponse.json({ import: latest, schema, rows });
 }

@@ -32,11 +32,18 @@ export async function GET(req) {
     .order('name', { ascending: true });
   if (gErr) return NextResponse.json({ error: gErr.message }, { status: 500 });
 
-  const { data: users, error: uErr } = await admin
-    .from('app_users')
-    .select('user_id,email,display_name,group_id,country_code,ad_key,auth_user_id,created_at')
-    .order('created_at', { ascending: false });
-  if (uErr) return NextResponse.json({ error: uErr.message }, { status: 500 });
+  let users = [];
+  {
+    const colsNew = 'user_id,email,display_name,group_id,country_code,ad_key,plz_filter,auth_user_id,created_at';
+    const colsOld = 'user_id,email,display_name,group_id,country_code,ad_key,auth_user_id,created_at';
+    let res = await admin.from('app_users').select(colsNew).order('created_at', { ascending: false });
+    const msg = String(res?.error?.message || '').toLowerCase();
+    if (res?.error && msg.includes('plz_filter') && msg.includes('does not exist')) {
+      res = await admin.from('app_users').select(colsOld).order('created_at', { ascending: false });
+    }
+    if (res?.error) return NextResponse.json({ error: res.error.message }, { status: 500 });
+    users = res.data || [];
+  }
 
   return NextResponse.json({ users: users || [], groups: groups || [] });
 }
@@ -55,6 +62,7 @@ export async function POST(req) {
   const group_id = body.group_id ? String(body.group_id) : null;
   const country_code = String(body.country_code || '').trim() || null;
   const ad_key = String(body.ad_key || '').trim() || null;
+  const plz_filter = String(body.plz_filter || '').trim() || null;
 
   const providedPw = String(body.password || '').trim();
   const password = providedPw || genPassword();
@@ -82,20 +90,28 @@ export async function POST(req) {
     display_name: display_name || email,
     group_id,
     country_code,
-    ad_key
+    ad_key,
+    // optional column (safe to include only if present; if not, insert will fail)
+    ...(plz_filter ? { plz_filter } : {})
   };
 
   const { error: pErr } = await admin.from('app_users').insert(profileRow);
   if (pErr) {
     // best-effort cleanup
     try { await admin.auth.admin.deleteUser(authId); } catch {}
+    const msg = String(pErr.message || '').toLowerCase();
+    if (msg.includes('plz_filter') && msg.includes('does not exist')) {
+      return NextResponse.json({
+        error: 'Die Spalte plz_filter existiert noch nicht. Bitte im Admin → Installer das Script "06 user territories" ausführen (danach erneut anlegen).'
+      }, { status: 400 });
+    }
     return NextResponse.json({ error: pErr.message }, { status: 500 });
   }
 
   await writeAdminLog(admin, me, {
     action: 'user_create',
     target: email,
-    payload: { email, display_name: profileRow.display_name, group_id, country_code, ad_key },
+    payload: { email, display_name: profileRow.display_name, group_id, country_code, ad_key, plz_filter },
     undo: null
   });
 
@@ -129,6 +145,7 @@ export async function PATCH(req) {
   if (body.group_id != null) patch.group_id = body.group_id ? String(body.group_id) : null;
   if (body.country_code != null) patch.country_code = String(body.country_code || '').trim() || null;
   if (body.ad_key != null) patch.ad_key = String(body.ad_key || '').trim() || null;
+  if (body.plz_filter != null) patch.plz_filter = String(body.plz_filter || '').trim() || null;
 
   if (!Object.keys(patch).length) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 
@@ -146,10 +163,18 @@ export async function PATCH(req) {
     .from('app_users')
     .update(patch)
     .eq('user_id', user_id)
-    .select('user_id,email,display_name,group_id,country_code,ad_key,auth_user_id,created_at')
+    .select('user_id,email,display_name,group_id,country_code,ad_key,plz_filter,auth_user_id,created_at')
     .limit(1);
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    const msg = String(error.message || '').toLowerCase();
+    if (msg.includes('plz_filter') && msg.includes('does not exist')) {
+      return NextResponse.json({
+        error: 'Die Spalte plz_filter existiert noch nicht. Bitte im Admin → Installer das Script "06 user territories" ausführen.'
+      }, { status: 400 });
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 
   const updated = data?.[0] || null;
   await writeAdminLog(admin, me, {
