@@ -4,6 +4,28 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+async function ensureAdminRootApp(admin) {
+  // Best-effort: create a persistent Admin tile (manageable in Admin → Apps).
+  // Safe even if a UNIQUE(slug) constraint is missing.
+  const { data: existing } = await admin
+    .from('apps')
+    .select('id')
+    .eq('slug', 'admin')
+    .limit(1);
+
+  if (existing?.length) return;
+
+  await admin.from('apps').insert({
+    slug: 'admin',
+    title: 'Admin',
+    icon: '🛡️',
+    href: '/admin',
+    sort: 94,
+    is_enabled: true,
+    type: 'link'
+  });
+}
+
 function dedupeApps(list) {
   const out = [];
   const seen = new Set();
@@ -21,6 +43,11 @@ export async function GET(req) {
   if (me.status !== 200) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const admin = getSupabaseAdmin();
+
+  if (me.isAdmin) {
+    // Ensure the "Admin" entry exists in DB so it can be managed like any other app.
+    try { await ensureAdminRootApp(admin); } catch {}
+  }
 
   const { data: allApps, error: appsErr } = await admin
     .from('apps')
@@ -50,6 +77,12 @@ export async function GET(req) {
 
   apps = dedupeApps(apps);
 
+  // Collapse all /admin/* apps into a single "Admin" tile on the Desktop.
+  apps = apps.filter(a => {
+    const href = String(a?.href || '');
+    return !href.startsWith('/admin/');
+  });
+
   let dock = [];
   if (groupId) {
     const { data: fav, error: favErr } = await admin
@@ -60,6 +93,7 @@ export async function GET(req) {
 
     if (!favErr && fav) {
       dock = dedupeApps(fav.map(r => r.apps).filter(Boolean).filter(a => a.is_enabled));
+      dock = dock.filter(a => !String(a?.href || '').startsWith('/admin/'));
     }
   }
 

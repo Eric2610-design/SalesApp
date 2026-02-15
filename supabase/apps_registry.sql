@@ -33,8 +33,11 @@ values
   ('inventory','Lagerbestand','🏷️','/inventory',30,true),
   ('users','Profil','👤','/users',40,true),
   ('settings','Einstellungen','⚙️','/settings',90,true),
+  ('admin','Admin','🛡️','/admin',94,true),
   ('admin-installer','Installer','🛠️','/admin/installer',95,true),
-  ('admin-apps','Admin Apps','🧩','/admin/apps',96,true)
+  ('admin-apps','Admin Apps','🧩','/admin/apps',96,true),
+  ('admin-users','Benutzer','👥','/admin/users',97,true),
+  ('admin-import','Datenimport','⬆️','/admin/import',98,true)
 on conflict (slug) do nothing;
 
 -- Visible for CEO/AD

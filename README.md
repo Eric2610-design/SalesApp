@@ -34,3 +34,9 @@ Optional:
 - Layout nutzt die komplette Browser-Fläche (kein grauer Außenrand/Device-Rahmen).
 - Datum/Uhrzeit stehen rechts neben der Suchleiste.
 - Admin → Apps: installierte Apps können jetzt direkt deaktiviert/aktiviert und gelöscht werden.
+
+## UI/Apps Updates (2026-02-15.2)
+
+- Home/Desktop: Alle Admin-Unterseiten (/admin/*) werden zu einer einzigen Kachel **Admin** zusammengefasst.
+- Neue Admin-Startseite `/admin` (Apps, Installer, Benutzer, Datenimport).
+- Admin → Datenimport: CSV/XLSX Upload in generische Import-Tabellen (`dataset_imports`, `dataset_rows`).

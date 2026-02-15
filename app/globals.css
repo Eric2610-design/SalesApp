@@ -204,3 +204,22 @@ textarea{ min-height: 160px; resize: vertical; }
   font-size:13px;
   white-space:pre-wrap;
 }
+
+.table{
+  width:100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.table th, .table td{
+  text-align:left;
+  padding:8px 10px;
+  border-bottom:1px solid rgba(15, 23, 42, .08);
+  vertical-align: top;
+}
+.table th{
+  position: sticky;
+  top: 0;
+  background: rgba(255,255,255,.92);
+  backdrop-filter: blur(8px);
+  z-index: 1;
+}

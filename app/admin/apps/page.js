@@ -84,7 +84,7 @@ export default function AdminAppsPage() {
     }
   }
 
-  if (err) return <div className="error">{err}<div style={{ marginTop:10 }}><a className="secondary" href="/settings">Zurück</a></div></div>;
+  if (err) return <div className="error">{err}<div style={{ marginTop:10 }}><a className="secondary" href="/admin">Zurück</a></div></div>;
 
   return (
     <div style={{ display:'grid', gap:14 }}>
@@ -161,7 +161,7 @@ export default function AdminAppsPage() {
       </div>
 
       <div className="row">
-        <a className="secondary" href="/settings" style={{ textDecoration:'none' }}>Zurück</a>
+        <a className="secondary" href="/admin" style={{ textDecoration:'none' }}>Zurück</a>
       </div>
     </div>
   );

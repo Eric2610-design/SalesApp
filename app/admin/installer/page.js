@@ -52,7 +52,7 @@ export default function InstallerPage() {
         <div className="h1">Installer</div>
         <div className="error" style={{ marginTop:10 }}>{msg || 'Nur Admin.'}</div>
         <div style={{ marginTop:10 }}>
-          <a className="secondary" href="/settings" style={{ textDecoration:'none' }}>Zurück</a>
+          <a className="secondary" href="/admin" style={{ textDecoration:'none' }}>Zurück</a>
         </div>
       </div>
     );
@@ -83,7 +83,7 @@ export default function InstallerPage() {
           ))}
         </div>
         <div className="muted" style={{ fontSize:12, marginTop:10 }}>
-          Tipp: Zuerst <strong>00 core users</strong>, dann <strong>01 exec_sql</strong>, dann <strong>02 apps registry</strong>.
+          Tipp: Zuerst <strong>00 core users</strong>, dann <strong>01 exec_sql</strong>, dann <strong>02 apps registry</strong>, dann <strong>03 import tables</strong>.
         </div>
       </div>
 
@@ -92,7 +92,7 @@ export default function InstallerPage() {
         <textarea value={sql} onChange={(e)=>setSql(e.target.value)} placeholder="SQL hier einfügen…" />
         <div className="row" style={{ marginTop:10 }}>
           <button className="primary" onClick={run}>Ausführen</button>
-          <a className="secondary" href="/settings" style={{ textDecoration:'none' }}>Zurück</a>
+          <a className="secondary" href="/admin" style={{ textDecoration:'none' }}>Zurück</a>
         </div>
         {msg ? <div className={msg.startsWith('OK') ? 'card' : 'error'} style={{ marginTop:12 }}>{msg}</div> : null}
       </div>
