@@ -27,3 +27,10 @@ Optional:
 
 - Nur Emails in `ADMIN_EMAILS` gelten als Admin.
 - Beim ersten `GET /api/auth/me` wird automatisch ein `app_users` Profil angelegt bzw. `auth_user_id` gesetzt.
+
+## UI/Apps Updates (2026-02-15)
+
+- Home/Dock zeigen keine doppelten Apps mehr (Dedup nach `href`/`slug`).
+- Layout nutzt die komplette Browser-Fläche (kein grauer Außenrand/Device-Rahmen).
+- Datum/Uhrzeit stehen rechts neben der Suchleiste.
+- Admin → Apps: installierte Apps können jetzt direkt deaktiviert/aktiviert und gelöscht werden.

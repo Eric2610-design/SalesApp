@@ -6,6 +6,7 @@ export default function AdminAppsPage() {
   const [apps, setApps] = useState([]);
   const [err, setErr] = useState('');
   const [form, setForm] = useState({ slug:'', title:'', icon:'🧩', href:'', sort: 100, enabled: true });
+  const [busyId, setBusyId] = useState('');
 
   async function loadAll() {
     setErr('');
@@ -45,6 +46,41 @@ export default function AdminAppsPage() {
       setForm({ slug:'', title:'', icon:'🧩', href:'', sort: 100, enabled: true });
     } catch (e) {
       setErr(e?.message || String(e));
+    }
+  }
+
+  async function setEnabled(id, next) {
+    setErr('');
+    setBusyId(id);
+    try {
+      const res = await fetch('/api/admin/apps', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, is_enabled: !!next })
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || 'Update failed');
+      await loadAll();
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setBusyId('');
+    }
+  }
+
+  async function deleteApp(id, slug) {
+    if (!window.confirm(`App wirklich löschen?\n\n${slug}`)) return;
+    setErr('');
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/admin/apps?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || 'Delete failed');
+      await loadAll();
+    } catch (e) {
+      setErr(e?.message || String(e));
+    } finally {
+      setBusyId('');
     }
   }
 
@@ -98,7 +134,25 @@ export default function AdminAppsPage() {
             <div key={a.id} style={{ padding:10, borderRadius:14, border:'1px solid rgba(15,23,42,.12)', background:'rgba(255,255,255,.7)' }}>
               <div className="row" style={{ justifyContent:'space-between' }}>
                 <div style={{ fontWeight:800 }}>{a.icon} {a.title} <span className="muted" style={{ fontSize:12 }}>({a.slug})</span></div>
-                <div className="muted" style={{ fontSize:12 }}>sort {a.sort} · {a.is_enabled ? 'enabled' : 'disabled'}</div>
+                <div className="row" style={{ gap:10 }}>
+                  <label className="row" style={{ gap:8 }}>
+                    <input
+                      type="checkbox"
+                      checked={!!a.is_enabled}
+                      disabled={busyId === a.id}
+                      onChange={(e) => setEnabled(a.id, e.target.checked)}
+                    />
+                    <span className="muted" style={{ fontSize:12 }}>{a.is_enabled ? 'aktiv' : 'inaktiv'}</span>
+                  </label>
+                  <button
+                    className="secondary"
+                    disabled={busyId === a.id}
+                    onClick={() => deleteApp(a.id, a.slug)}
+                    title="Löschen"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
               <div className="muted" style={{ fontSize:12, marginTop:4 }}>{a.href}</div>
             </div>

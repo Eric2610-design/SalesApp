@@ -4,6 +4,18 @@ import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 
+function dedupeApps(list) {
+  const out = [];
+  const seen = new Set();
+  for (const a of list || []) {
+    const k = String(a?.href || a?.slug || a?.id || '').toLowerCase();
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
+    out.push(a);
+  }
+  return out;
+}
+
 export async function GET(req) {
   const me = await getMeFromRequest(req);
   if (me.status !== 200) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -36,6 +48,8 @@ export async function GET(req) {
     }
   }
 
+  apps = dedupeApps(apps);
+
   let dock = [];
   if (groupId) {
     const { data: fav, error: favErr } = await admin
@@ -45,7 +59,7 @@ export async function GET(req) {
       .order('position', { ascending: true });
 
     if (!favErr && fav) {
-      dock = fav.map(r => r.apps).filter(Boolean).filter(a => a.is_enabled);
+      dock = dedupeApps(fav.map(r => r.apps).filter(Boolean).filter(a => a.is_enabled));
     }
   }
 

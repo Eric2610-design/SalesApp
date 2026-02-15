@@ -55,7 +55,6 @@ export default function Shell({ children }) {
         <div className="ios-statusbar">
           <div className="ios-status-left">
             <div className="ios-pill" />
-            <div className="ios-mini">{clock.date} · {clock.time}</div>
           </div>
 
           <form onSubmit={onSearchSubmit} className="ios-search">
@@ -63,6 +62,7 @@ export default function Shell({ children }) {
           </form>
 
           <div className="ios-status-right">
+            <div className="ios-mini">{clock.date} · {clock.time}</div>
             {authed ? (
               <a className="ios-avatar" href="/settings" title="Einstellungen">⚙️</a>
             ) : (
