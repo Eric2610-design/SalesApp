@@ -1,13 +1,12 @@
 import { NextResponse } from 'next/server';
-import { getUserFromCookie } from '@/lib/auth';
+import { getMeFromRequest } from '@/lib/authServer';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
-import { getAdminEmails } from '@/lib/config';
 import { writeAdminLog, undoRestorePageConfig } from '@/lib/adminLog';
 
 export async function GET(req) {
-  const user = await getUserFromCookie(req.cookies);
-  if (!user) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
-  if (!getAdminEmails().includes(user.email)) return NextResponse.json({ error: 'Nur Admin.' }, { status: 403 });
+  const me = await getMeFromRequest(req);
+  if (me.status !== 200) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
+  if (!me.isAdmin) return NextResponse.json({ error: 'Nur Admin.' }, { status: 403 });
 
   const url = new URL(req.url);
   const key = String(url.searchParams.get('key') || '').trim();
@@ -25,9 +24,9 @@ export async function GET(req) {
 }
 
 export async function POST(req) {
-  const user = await getUserFromCookie(req.cookies);
-  if (!user) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
-  if (!getAdminEmails().includes(user.email)) return NextResponse.json({ error: 'Nur Admin.' }, { status: 403 });
+  const me = await getMeFromRequest(req);
+  if (me.status !== 200) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
+  if (!me.isAdmin) return NextResponse.json({ error: 'Nur Admin.' }, { status: 403 });
 
   const body = await req.json().catch(() => ({}));
   const key = String(body.key || '').trim();
@@ -46,7 +45,7 @@ export async function POST(req) {
   const nextRow = {
     key,
     config,
-    updated_by: user.email,
+    updated_by: me.profile?.email || me.user?.email,
     updated_at: new Date().toISOString()
   };
 
@@ -55,7 +54,7 @@ export async function POST(req) {
 
   await writeAdminLog({
     admin,
-    actor: user.email,
+    actor: me.profile?.email || me.user?.email,
     action: 'update_page_config',
     details: { key, config },
     undo: undoRestorePageConfig(key, previousRow)

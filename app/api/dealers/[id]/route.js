@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getUserFromCookie } from '@/lib/auth';
+import { getMeFromRequest } from '@/lib/authServer';
 import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
 
 function normKey(v) {
@@ -53,8 +53,8 @@ function guessKey(obj, preferred = []) {
 }
 
 export async function GET(req, ctx) {
-  const user = await getUserFromCookie(req.cookies);
-  if (!user) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
+  const me = await getMeFromRequest(req);
+  if (me.status !== 200) return NextResponse.json({ error: 'Nicht eingeloggt' }, { status: 401 });
 
   const id = ctx?.params?.id;
   const rowIndex = Number(id);
