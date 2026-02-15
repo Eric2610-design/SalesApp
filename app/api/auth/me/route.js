@@ -1,17 +1,21 @@
-import { NextResponse } from 'next/server';
-import { getMeFromRequest } from '@/lib/authServer';
-
+export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+import { requireUserFromRequest } from '../../../../lib/authServer';
+
 export async function GET(req) {
-  const me = await getMeFromRequest(req);
-  if (me.status !== 200) {
-    return NextResponse.json({ error: me.error || 'Unauthorized' }, { status: me.status || 401 });
+  try {
+    const { user, profile, group, isAdmin, error } = await requireUserFromRequest(req);
+    if (error) return Response.json({ error }, { status: 401 });
+
+    return Response.json({
+      ok: true,
+      user: { id: user.id, email: user.email },
+      profile,
+      group,
+      isAdmin,
+    });
+  } catch (e) {
+    return Response.json({ error: e?.message || String(e) }, { status: 500 });
   }
-  return NextResponse.json({
-    user: me.user,
-    profile: me.profile,
-    group: me.group,
-    isAdmin: me.isAdmin
-  });
 }
