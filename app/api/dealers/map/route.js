@@ -70,8 +70,19 @@ function parseBuyingGroupKey(obj, brandsCfg) {
 function parseNum(v) {
   if (v == null) return NaN;
   if (typeof v === 'number') return v;
-  const s = String(v).trim().replace(',', '.');
-  const n = Number(s);
+  const raw = String(v).trim();
+  if (!raw) return NaN;
+
+  // tolerate common coordinate formats: '50,1109', '50.1109 N', '50.1109°', 'lat:50.1109'
+  const cleaned = raw
+    .replace(/\s+/g, '')
+    .replace(/,/g, '.')
+    .replace(/°/g, '')
+    .replace(/[NSEW]$/i, '');
+
+  const m = cleaned.match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/);
+  if (!m) return NaN;
+  const n = Number(m[0]);
   return Number.isFinite(n) ? n : NaN;
 }
 
@@ -116,6 +127,8 @@ function candidateLatKeys(keys) {
     const kk = k.toLowerCase();
     let score = 0;
     if (kk === 'lat' || kk === 'latitude') score += 10;
+    if (kk === 'lt') score += 9;
+    if (kk.endsWith('_lt')) score += 5;
     if (kk.includes('lat')) score += 6;
     if (kk.includes('breit')) score += 6;
     if (kk.includes('y')) score += 1;
@@ -131,6 +144,8 @@ function candidateLngKeys(keys) {
     const kk = k.toLowerCase();
     let score = 0;
     if (kk === 'lng' || kk === 'lon' || kk === 'longitude') score += 10;
+    if (kk === 'ln') score += 9;
+    if (kk.endsWith('_ln')) score += 5;
     if (kk.includes('lng') || kk.includes('lon') || kk.includes('long')) score += 6;
     if (kk.includes('läng')) score += 6;
     if (kk.includes('x')) score += 1;
@@ -163,6 +178,21 @@ function findLatLng(obj, preferredLat, preferredLng) {
       const m = parseNum(obj[gk]);
       if (isLng(m)) return { lat: n, lng: m, latKey: lk, lngKey: gk };
     }
+  }
+
+
+
+  // Fallback: single column containing "lat,lng" or "lat lng" (common in exports)
+  for (const k of keys) {
+    const v = obj?.[k];
+    if (v == null) continue;
+    const s = String(v);
+    const nums = s.replace(/,/g, '.').match(/[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?/g);
+    if (!nums || nums.length < 2) continue;
+    const a = Number(nums[0]);
+    const b = Number(nums[1]);
+    if (isLat(a) && isLng(b)) return { lat: a, lng: b, latKey: k, lngKey: k };
+    if (isLat(b) && isLng(a)) return { lat: b, lng: a, latKey: k, lngKey: k };
   }
 
   return { lat: NaN, lng: NaN, latKey: '', lngKey: '' };

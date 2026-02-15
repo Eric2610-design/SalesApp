@@ -15,6 +15,7 @@ export default function DealersMapPage() {
   const [loading, setLoading] = useState(true);
   const [all, setAll] = useState([]);
   const [counts, setCounts] = useState(null);
+  const [mapConfig, setMapConfig] = useState(null);
   const [bounds, setBounds] = useState(null);
   const [onlyBacklog, setOnlyBacklog] = useState(false);
   const [q, setQ] = useState('');
@@ -56,6 +57,7 @@ export default function DealersMapPage() {
         if (!alive) return;
         setAll(Array.isArray(j?.markers) ? j.markers : []);
         setCounts(j?.counts || null);
+        setMapConfig(j?.config || null);
       } catch (e) {
         if (alive) setErr(e?.message || String(e));
       } finally {
@@ -138,6 +140,7 @@ export default function DealersMapPage() {
               <>
                 Im Ausschnitt: <strong>{stats.inView}</strong> · Gesamt (mit Koordinaten): <strong>{stats.total}</strong>
                 {counts?.no_coords ? <> · ohne Koordinaten: <strong>{counts.no_coords}</strong></> : null}
+                {mapConfig?.latKey || mapConfig?.lngKey ? (<> · Lat/Lng: <strong>{mapConfig?.latKey || '—'}</strong>/<strong>{mapConfig?.lngKey || '—'}</strong> <span className="muted">({mapConfig?.latKey_source || '—'}/{mapConfig?.lngKey_source || '—'})</span></>) : null}
               </>
             )}
           </div>
@@ -159,6 +162,11 @@ export default function DealersMapPage() {
 
         {!visible.length ? (
           <div className="muted" style={{ marginTop: 10 }}>Keine Händler im aktuellen Ausschnitt.</div>
+            {(!loading && (all || []).length === 0) ? (
+              <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                Hinweis: Wenn du sicher bist, dass Koordinaten vorhanden sind, prüfe bitte im Admin-Bereich bei <strong>Dataset → Händler → Geodaten</strong> die Lat/Lng-Spalten (z.B. <code>lat</code> und <code>ln</code>/<code>lng</code>).
+              </div>
+            ) : null}
         ) : (
           <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
             {visible.slice(0, 250).map((m) => (
