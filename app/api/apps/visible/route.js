@@ -1,95 +1,53 @@
-export const runtime = 'nodejs';
+import { NextResponse } from 'next/server';
+import { getMeFromRequest } from '@/lib/authServer';
+import { getSupabaseAdmin } from '@/lib/supabaseAdmin';
+
 export const dynamic = 'force-dynamic';
 
-import { requireUserFromRequest } from '../../../../lib/authServer';
-import { getSupabaseAdmin } from '../../../../lib/supabaseAdmin';
-
 export async function GET(req) {
-  const { group, isAdmin, error } = await requireUserFromRequest(req);
-  if (error) return Response.json({ error }, { status: 401 });
+  const me = await getMeFromRequest(req);
+  if (me.status !== 200) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const admin = getSupabaseAdmin();
 
-  const { data: allApps, error: aErr } = await admin
+  const { data: allApps, error: appsErr } = await admin
     .from('apps')
-    .select('id,slug,title,icon,type,href,sort,is_enabled')
+    .select('id,slug,title,icon,href,sort,is_enabled')
     .eq('is_enabled', true)
     .order('sort', { ascending: true });
 
-  if (aErr) return Response.json({ error: aErr.message }, { status: 500 });
-
-  // Defensive: if the DB was created without a UNIQUE constraint on apps.slug,
-  // repeated installs can create duplicates. We dedupe by slug here so the UI
-  // stays usable even before the DB is cleaned.
-  const slugById = new Map((allApps || []).map((a) => [a.id, a.slug]));
-
-  const dedupeBySlug = (list) => {
-    const seen = new Set();
-    const out = [];
-    for (const a of list || []) {
-      const slug = a?.slug;
-      if (!slug) continue;
-      if (seen.has(slug)) continue;
-      seen.add(slug);
-      out.push(a);
-    }
-    return out;
-  };
+  if (appsErr) return NextResponse.json({ error: appsErr.message }, { status: 500 });
 
   let apps = allApps || [];
+  const groupId = me.profile?.group_id;
 
-  if (!isAdmin) {
-    if (!group?.id) apps = [];
+  if (!me.isAdmin) {
+    if (!groupId) apps = [];
+    else {
+      const { data: vis, error: visErr } = await admin
+        .from('app_group_visibility')
+        .select('app_id,is_visible')
+        .eq('group_id', groupId);
 
-    const { data: vis, error: vErr } = await admin
-      .from('app_group_visibility')
-      .select('app_id')
-      .eq('group_id', group.id)
-      .eq('is_visible', true);
+      if (visErr) return NextResponse.json({ error: visErr.message }, { status: 500 });
 
-    if (vErr) return Response.json({ error: vErr.message }, { status: 500 });
-
-    // Convert allowed IDs to allowed slugs so duplicates don't break visibility.
-    const allowedSlugs = new Set(
-      (vis || [])
-        .map((x) => slugById.get(x.app_id))
-        .filter(Boolean)
-    );
-
-    apps = apps.filter((a) => allowedSlugs.has(a.slug));
-  }
-
-  apps = dedupeBySlug(apps);
-
-  let dock = [];
-  if (group?.id) {
-    const { data: fav, error: fErr } = await admin
-      .from('dock_favorites')
-      .select('app_id,position')
-      .eq('group_id', group.id)
-      .order('position', { ascending: true });
-
-    if (!fErr && (fav || []).length) {
-      // Map favorite app_ids -> slug, then build a stable dock list by slug
-      // so duplicate app rows don't break the dock.
-      const posBySlug = new Map();
-      for (const x of fav || []) {
-        const slug = slugById.get(x.app_id);
-        if (!slug) continue;
-        if (!posBySlug.has(slug) || x.position < posBySlug.get(slug)) posBySlug.set(slug, x.position);
-      }
-
-      dock = apps
-        .filter((a) => posBySlug.has(a.slug))
-        .sort((a, b) => (posBySlug.get(a.slug) || 0) - (posBySlug.get(b.slug) || 0));
+      const map = new Map((vis || []).map(v => [v.app_id, !!v.is_visible]));
+      apps = apps.filter(a => map.get(a.id));
     }
   }
 
-  const settings = (allApps || []).find((a) => a.slug === 'settings');
-  if (settings && !apps.some((a) => a.slug === 'settings')) apps = [...apps, settings];
+  let dock = [];
+  if (groupId) {
+    const { data: fav, error: favErr } = await admin
+      .from('dock_favorites')
+      .select('position, apps (id,slug,title,icon,href,sort,is_enabled)')
+      .eq('group_id', groupId)
+      .order('position', { ascending: true });
 
-  // Final safety: ensure the response has no duplicates.
-  apps = dedupeBySlug(apps);
+    if (!favErr && fav) {
+      dock = fav.map(r => r.apps).filter(Boolean).filter(a => a.is_enabled);
+    }
+  }
 
-  return Response.json({ ok: true, apps, dock });
+  return NextResponse.json({ apps, dock });
 }

@@ -1,247 +1,113 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSupabaseClient } from '../../../lib/supabaseClient';
+import { useEffect, useState } from 'react';
 
-export default function AdminApps() {
-  const supabase = useMemo(() => getSupabaseClient(), []);
+export default function AdminAppsPage() {
   const [apps, setApps] = useState([]);
   const [err, setErr] = useState('');
-  const [msg, setMsg] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [busySlug, setBusySlug] = useState('');
+  const [form, setForm] = useState({ slug:'', title:'', icon:'🧩', href:'', sort: 100, enabled: true });
 
-  const protectedSlugs = useMemo(() => new Set([
-    'home',
-    'login',
-    'profile',
-    'users',
-    'settings',
-    'admin',
-    'admin_apps',
-    'admin_installer',
-    'debug',
-  ]), []);
-
-  const [form, setForm] = useState({ slug: '', title: '', icon: '🧩', href: '', sort: 100, is_enabled: true });
-  const [visibility, setVisibility] = useState({ Aussendienst: true, CEO: true });
-  const [dock, setDock] = useState({ Aussendienst: '', CEO: '' });
-
-  async function load() {
+  async function loadAll() {
     setErr('');
-    setMsg('');
-    setBusy(true);
-    try {
-      const sess = (await supabase.auth.getSession()).data.session;
-      const t = sess?.access_token;
-      if (!t) throw new Error('Bitte einloggen');
+    const meRes = await fetch('/api/auth/me', { cache:'no-store' });
+    if (!meRes.ok) return setErr('Nicht eingeloggt');
+    const meJ = await meRes.json();
+    if (!meJ?.isAdmin) return setErr('Nur Admin. (ADMIN_EMAILS)');
 
-      const res = await fetch('/api/admin/apps', { headers: { authorization: `Bearer ${t}` }, cache: 'no-store' });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Konnte Apps nicht laden');
-      setApps(j.apps || []);
-    } catch (e) {
-      setErr(e?.message || String(e));
-    } finally {
-      setBusy(false);
-    }
+    const res = await fetch('/api/admin/apps', { cache:'no-store' });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) return setErr(j?.error || 'Fehler');
+    setApps(j.apps || []);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadAll(); }, []);
 
   async function createApp() {
     setErr('');
-    setMsg('');
-    setBusy(true);
     try {
-      const sess = (await supabase.auth.getSession()).data.session;
-      const t = sess?.access_token;
-      if (!t) throw new Error('Bitte einloggen');
-
+      const slug = form.slug.trim();
+      const payload = {
+        slug,
+        title: form.title.trim(),
+        icon: form.icon || '•',
+        href: (form.href || '').trim() || `/apps/${slug}`,
+        sort: Number(form.sort || 100),
+        enabled: !!form.enabled
+      };
       const res = await fetch('/api/admin/apps', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${t}` },
-        body: JSON.stringify({
-          slug: form.slug,
-          title: form.title,
-          icon: form.icon,
-          type: 'link',
-          href: form.href || undefined,
-          sort: Number(form.sort) || 100,
-          is_enabled: !!form.is_enabled,
-          visibilityByGroup: visibility,
-          dockByGroup: dock,
-        }),
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify(payload)
       });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Konnte App nicht erstellen');
-
-      setMsg('App erstellt ✅');
-      setForm({ slug: '', title: '', icon: '🧩', href: '', sort: 100, is_enabled: true });
-      setDock({ Aussendienst: '', CEO: '' });
-      await load();
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || 'Create failed');
+      await loadAll();
+      setForm({ slug:'', title:'', icon:'🧩', href:'', sort: 100, enabled: true });
     } catch (e) {
       setErr(e?.message || String(e));
-    } finally {
-      setBusy(false);
     }
   }
 
-  async function uninstallApp(slug) {
-    setErr('');
-    setMsg('');
-    if (!slug) return;
-    if (protectedSlugs.has(String(slug).toLowerCase())) {
-      setErr('Diese App ist geschützt und kann nicht deinstalliert werden.');
-      return;
-    }
-
-    const sure = confirm(
-      `App „${slug}“ wirklich deinstallieren?\n\n` +
-      `Hinweis: Es wird nur die App-Registrierung entfernt (Homescreen/Dock/Sichtbarkeit). ` +
-      `Daten/Tabellen bleiben erhalten.`
-    );
-    if (!sure) return;
-
-    setBusySlug(slug);
-    try {
-      const sess = (await supabase.auth.getSession()).data.session;
-      const t = sess?.access_token;
-      if (!t) throw new Error('Bitte einloggen');
-
-      const res = await fetch(`/api/admin/apps?slug=${encodeURIComponent(slug)}`, {
-        method: 'DELETE',
-        headers: { authorization: `Bearer ${t}` },
-      });
-      const j = await res.json();
-      if (!res.ok) throw new Error(j?.error || 'Konnte App nicht deinstallieren');
-
-      setMsg(`Deinstalliert: ${slug} ✅`);
-      await load();
-    } catch (e) {
-      setErr(e?.message || String(e));
-    } finally {
-      setBusySlug('');
-    }
-  }
+  if (err) return <div className="error">{err}<div style={{ marginTop:10 }}><a className="secondary" href="/settings">Zurück</a></div></div>;
 
   return (
-    <div className="grid">
+    <div style={{ display:'grid', gap:14 }}>
       <div className="card">
-        <h1 className="h1">Admin · Apps</h1>
-        <p className="sub">Apps hinzufügen (Homescreen & Dock kommen aus Supabase).</p>
+        <div className="h1">Admin · Apps</div>
+        <div className="sub">Apps Registry verwalten</div>
+      </div>
 
-        {err ? <div className="error">{err}</div> : null}
-        {msg ? <div className="toast">{msg}</div> : null}
-
-        <div className="card" style={{ marginTop: 12 }}>
-          <strong>Neue App</strong>
-
-          <div className="row" style={{ marginTop: 10 }}>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <label>Slug</label><br/>
-              <input value={form.slug} onChange={(e) => setForm((f) => ({ ...f, slug: e.target.value }))} placeholder="z.B. lager" />
-            </div>
-            <div style={{ flex: 1, minWidth: 220 }}>
-              <label>Titel</label><br/>
-              <input value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="z.B. Lagerbestand" />
-            </div>
-            <div style={{ width: 120 }}>
-              <label>Icon</label><br/>
-              <input value={form.icon} onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))} placeholder="🏭" />
-            </div>
+      <div className="card">
+        <div style={{ fontWeight:800, marginBottom:10 }}>Neue App</div>
+        <div className="row" style={{ flexWrap:'wrap' }}>
+          <div style={{ flex:1, minWidth:160 }}>
+            <div className="label">Slug</div>
+            <input className="input" value={form.slug} onChange={(e)=>setForm(f=>({...f, slug:e.target.value}))} placeholder="dealers" />
           </div>
-
-          <div className="row" style={{ marginTop: 10 }}>
-            <div style={{ flex: 1, minWidth: 260 }}>
-              <label>Href (Route)</label><br/>
-              <input value={form.href} onChange={(e) => setForm((f) => ({ ...f, href: e.target.value }))} placeholder="/inventory oder /database" />
-              <div className="sub" style={{ marginTop: 6 }}>Wenn leer: /apps/&lt;slug&gt;.</div>
-            </div>
-            <div style={{ width: 120 }}>
-              <label>Sort</label><br/>
-              <input value={form.sort} onChange={(e) => setForm((f) => ({ ...f, sort: e.target.value }))} />
-            </div>
+          <div style={{ flex:1, minWidth:160 }}>
+            <div className="label">Titel</div>
+            <input className="input" value={form.title} onChange={(e)=>setForm(f=>({...f, title:e.target.value}))} placeholder="Händler" />
           </div>
-
-          <div className="row" style={{ marginTop: 12 }}>
-            <label className="sub" style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-              <input type="checkbox" checked={!!form.is_enabled} onChange={(e) => setForm((f) => ({ ...f, is_enabled: e.target.checked }))} />
-              aktiviert
-            </label>
+          <div style={{ width:110 }}>
+            <div className="label">Icon</div>
+            <input className="input" value={form.icon} onChange={(e)=>setForm(f=>({...f, icon:e.target.value}))} />
           </div>
+        </div>
 
-          <hr className="sep" style={{ marginTop: 14 }} />
-
-          <strong>Sichtbarkeit</strong>
-          <div style={{ display: 'grid', gap: 10, marginTop: 10 }}>
-            <label className="row" style={{ justifyContent: 'space-between' }}>
-              <span>Aussendienst</span>
-              <input type="checkbox" checked={!!visibility.Aussendienst} onChange={(e) => setVisibility((v) => ({ ...v, Aussendienst: e.target.checked }))} />
-            </label>
-            <label className="row" style={{ justifyContent: 'space-between' }}>
-              <span>CEO</span>
-              <input type="checkbox" checked={!!visibility.CEO} onChange={(e) => setVisibility((v) => ({ ...v, CEO: e.target.checked }))} />
-            </label>
-            <div className="sub">Admin sieht immer alles.</div>
+        <div className="row" style={{ marginTop:10, flexWrap:'wrap' }}>
+          <div style={{ flex:1, minWidth:240 }}>
+            <div className="label">Href</div>
+            <input className="input" value={form.href} onChange={(e)=>setForm(f=>({...f, href:e.target.value}))} placeholder="/database" />
           </div>
-
-          <hr className="sep" style={{ marginTop: 14 }} />
-          <strong>Dock Favorit (Position)</strong>
-
-          <div className="row" style={{ marginTop: 10 }}>
-            <div style={{ width: 160 }}>
-              <label>Aussendienst</label><br/>
-              <input value={dock.Aussendienst || ''} onChange={(e) => setDock((d) => ({ ...d, Aussendienst: e.target.value }))} placeholder="z.B. 2" />
-            </div>
-            <div style={{ width: 160 }}>
-              <label>CEO</label><br/>
-              <input value={dock.CEO || ''} onChange={(e) => setDock((d) => ({ ...d, CEO: e.target.value }))} placeholder="z.B. 3" />
-            </div>
+          <div style={{ width:120 }}>
+            <div className="label">Sort</div>
+            <input className="input" type="number" value={form.sort} onChange={(e)=>setForm(f=>({...f, sort:e.target.value}))} />
           </div>
-
-          <div className="row" style={{ marginTop: 14 }}>
-            <button onClick={createApp} disabled={busy || !form.slug || !form.title}>
-              {busy ? '…' : 'App erstellen'}
-            </button>
-            <a className="secondary" href="/" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>
-              Homescreen →
-            </a>
-          </div>
+          <label className="row" style={{ gap:8 }}>
+            <input type="checkbox" checked={form.enabled} onChange={(e)=>setForm(f=>({...f, enabled:e.target.checked}))} />
+            <span className="label">enabled</span>
+          </label>
+          <button className="primary" onClick={createApp} disabled={!form.slug || !form.title}>Anlegen</button>
         </div>
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Apps (aktuell)</h2>
-        <div className="sub">Aus der Tabelle <b>apps</b>.</div>
-
-        <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-          {(apps || []).map((a) => (
-            <div key={a.id} className="card" style={{ padding: 12 }}>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <strong>{a.icon} {a.title}</strong>
-                <span className="sub">{a.slug}</span>
+        <div style={{ fontWeight:800, marginBottom:10 }}>Apps ({apps.length})</div>
+        <div style={{ display:'grid', gap:10 }}>
+          {apps.map(a => (
+            <div key={a.id} style={{ padding:10, borderRadius:14, border:'1px solid rgba(15,23,42,.12)', background:'rgba(255,255,255,.7)' }}>
+              <div className="row" style={{ justifyContent:'space-between' }}>
+                <div style={{ fontWeight:800 }}>{a.icon} {a.title} <span className="muted" style={{ fontSize:12 }}>({a.slug})</span></div>
+                <div className="muted" style={{ fontSize:12 }}>sort {a.sort} · {a.is_enabled ? 'enabled' : 'disabled'}</div>
               </div>
-              <div className="sub" style={{ marginTop: 6 }}>href: <span style={{ fontFamily: 'ui-monospace' }}>{a.href}</span></div>
-              <div className="sub">enabled: {String(a.is_enabled)}</div>
-
-              <div className="row" style={{ marginTop: 10, justifyContent: 'space-between' }}>
-                <a className="secondary" href={a.href || `/apps/${a.slug}`} target="_blank" rel="noreferrer" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>
-                  Öffnen
-                </a>
-                <button
-                  onClick={() => uninstallApp(a.slug)}
-                  disabled={busy || busySlug === a.slug || protectedSlugs.has(String(a.slug).toLowerCase())}
-                  title={protectedSlugs.has(String(a.slug).toLowerCase()) ? 'Geschützte App' : 'Deinstallieren'}
-                  style={{ opacity: protectedSlugs.has(String(a.slug).toLowerCase()) ? 0.5 : 1 }}
-                >
-                  {busySlug === a.slug ? '…' : 'Deinstallieren'}
-                </button>
-              </div>
+              <div className="muted" style={{ fontSize:12, marginTop:4 }}>{a.href}</div>
             </div>
           ))}
-          {!apps?.length ? <div className="sub">Keine Apps gefunden. Bitte `supabase/apps_registry.sql` ausführen.</div> : null}
         </div>
+      </div>
+
+      <div className="row">
+        <a className="secondary" href="/settings" style={{ textDecoration:'none' }}>Zurück</a>
       </div>
     </div>
   );
