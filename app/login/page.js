@@ -1,170 +1,79 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { getSupabaseClient } from '@/lib/supabaseClient';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 
-export default function LoginPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/';
+function Inner() {
+  const sp = useSearchParams();
+  const next = sp.get('next') || '/';
 
-  const [mode, setMode] = useState('password'); // 'password' | 'magic'
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState('e.fuhrmann@flyer-bikes.com');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [msg, setMsg] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
 
-  const isFlyer = useMemo(() => {
-    const e = (email || '').trim().toLowerCase();
-    return e.endsWith('@flyer-bikes.com') || e.endsWith('@flyer.ch') || e.endsWith('@flyer.com');
-  }, [email]);
-
-  const withTimeout = (promise, ms, label) => {
-    let t;
-    const timeout = new Promise((_, rej) => {
-      t = setTimeout(() => rej(new Error(label || 'Timeout')), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(t));
-  };
-
-  async function onMagic(e) {
+  async function onLogin(e) {
     e.preventDefault();
-    setMsg(null);
-    setLoading(true);
-
+    setMsg('');
+    setBusy(true);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 15000);
     try {
-      const supabase = getSupabaseClient();
-      const { error } = await supabase.auth.signInWithOtp({
-        email: email.trim(),
-        options: {
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
-        },
+      const res = await fetch('/api/auth/login', {
+        method:'POST',
+        headers:{ 'content-type':'application/json' },
+        body: JSON.stringify({ email, password }),
+        signal: controller.signal
       });
-      if (error) throw error;
-      setMsg({ type: 'ok', text: 'Magic Link gesendet. Bitte Email öffnen und klicken.' });
-    } catch (err) {
-      setMsg({ type: 'err', text: err?.message || String(err) });
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function onPassword(e) {
-    e.preventDefault();
-    setMsg(null);
-
-    if (!isFlyer) {
-      setMsg({ type: 'err', text: 'Passwort-Login ist nur für @flyer-bikes.com Accounts gedacht.' });
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const supabase = getSupabaseClient();
-      const { data, error } = await withTimeout(
-        supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        }),
-        15000,
-        'Timeout: Supabase Login antwortet nicht. Prüfe URL/Keys oder Netzwerk.'
-      );
-      if (error) throw error;
-      if (!data?.session) throw new Error('Login fehlgeschlagen (keine Session).');
-      // Hard navigation avoids rare router/session hydration hangs.
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j?.error || 'Login failed');
       window.location.assign(next);
-    } catch (err) {
-      setMsg({ type: 'err', text: err?.message || String(err) });
+    } catch (e2) {
+      setMsg(e2?.message || String(e2));
     } finally {
-      setLoading(false);
+      clearTimeout(t);
+      setBusy(false);
     }
   }
 
   return (
-    <div className="card" style={{ maxWidth: 520, margin: '60px auto', padding: 24 }}>
-      <h1 style={{ margin: 0, fontSize: 26, fontWeight: 700 }}>Login</h1>
-      <p style={{ marginTop: 6, marginBottom: 16, color: 'var(--muted)' }}>
-        Einloggen mit Passwort (nur @flyer-bikes.com) oder Magic Link.
-      </p>
+    <div className="card" style={{ maxWidth:520, margin:'0 auto' }}>
+      <div className="h1">Login</div>
+      <div className="sub">Passwort-Login über Server (stabil, ohne Supabase Session im Browser).</div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <button
-          type="button"
-          className={mode === 'password' ? 'btn primary' : 'btn'}
-          onClick={() => setMode('password')}
-        >
-          Passwort
-        </button>
-        <button
-          type="button"
-          className={mode === 'magic' ? 'btn primary' : 'btn'}
-          onClick={() => setMode('magic')}
-        >
-          Magic Link
-        </button>
-        <button type="button" className="btn" onClick={() => router.push('/')}>Zurück</button>
-      </div>
-
-      <div style={{ display: 'grid', gap: 10 }}>
-        <label style={{ display: 'grid', gap: 6 }}>
-          <span style={{ fontSize: 12, color: 'var(--muted)' }}>E-Mail</span>
-          <input
-            className="input"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="e.fuhrmann@flyer-bikes.com"
-            autoComplete="email"
-          />
-        </label>
-
-        {mode === 'password' && (
-          <label style={{ display: 'grid', gap: 6 }}>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>Passwort</span>
-            <input
-              className="input"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-            />
-            {!isFlyer && email.trim().length > 3 && (
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                Hinweis: Passwort-Login ist nur für @flyer-bikes.com gedacht.
-              </span>
-            )}
-          </label>
-        )}
-
-        {msg && (
-          <div
-            className="card"
-            style={{
-              padding: 12,
-              borderColor: msg.type === 'err' ? 'rgba(255,0,0,.25)' : 'rgba(0,180,90,.25)',
-              background: msg.type === 'err' ? 'rgba(255,0,0,.06)' : 'rgba(0,180,90,.06)',
-            }}
-          >
-            {msg.text}
-          </div>
-        )}
-
-        {mode === 'password' ? (
-          <button className="btn primary" disabled={loading} onClick={onPassword}>
-            {loading ? 'Logge ein…' : 'Einloggen'}
-          </button>
-        ) : (
-          <button className="btn primary" disabled={loading} onClick={onMagic}>
-            {loading ? 'Sende…' : 'Magic Link senden'}
-          </button>
-        )}
-
-        <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-          Tipp: Wenn du (noch) keinen Passwort-User hast, kannst du ihn im Supabase Dashboard unter
-          Authentication → Users anlegen oder weiterhin Magic Link nutzen.
+      <form onSubmit={onLogin} style={{ marginTop:12 }}>
+        <div>
+          <div className="label">E-Mail</div>
+          <input className="input" value={email} onChange={(e)=>setEmail(e.target.value)} autoComplete="email" />
         </div>
+
+        <div style={{ marginTop:12 }}>
+          <div className="label">Passwort</div>
+          <input className="input" value={password} onChange={(e)=>setPassword(e.target.value)} type="password" autoComplete="current-password" />
+        </div>
+
+        <button className="primary" style={{ marginTop:14, width:'100%' }} disabled={busy || !email || !password}>
+          {busy ? 'Logge ein…' : 'Einloggen'}
+        </button>
+
+        <div className="muted" style={{ marginTop:10, fontSize:12 }}>
+          Falls noch kein Passwort gesetzt: Supabase → Authentication → Users → “Send password reset”.
+        </div>
+      </form>
+
+      {msg ? <div className="error" style={{ marginTop:12 }}>Fehler: {msg}</div> : null}
+
+      <div style={{ marginTop:12 }}>
+        <a className="secondary" href="/debug" style={{ textDecoration:'none' }}>Debug</a>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="card">Lade…</div>}>
+      <Inner />
+    </Suspense>
   );
 }

@@ -1,98 +1,78 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { getSupabaseClient } from '../../lib/supabaseClient';
+import { useEffect, useState } from 'react';
 
-function Row({ href, title, subtitle, icon }) {
-  return (
-    <a className="settings-row" href={href}>
-      <div className="settings-left">
-        <div className="settings-icon">{icon}</div>
-        <div>
-          <div className="settings-title">{title}</div>
-          {subtitle ? <div className="settings-sub">{subtitle}</div> : null}
-        </div>
-      </div>
-      <div className="settings-right">›</div>
-    </a>
-  );
-}
-
-export default function Settings() {
-  const supabase = useMemo(() => getSupabaseClient(), []);
+export default function SettingsPage() {
   const [me, setMe] = useState(null);
   const [err, setErr] = useState('');
 
   useEffect(() => {
     let alive = true;
-    async function load() {
+    (async () => {
       setErr('');
       try {
-        const sess = (await supabase.auth.getSession()).data.session;
-        const token = sess?.access_token;
-        if (!token) throw new Error('Bitte einloggen');
-
-        const res = await fetch('/api/auth/me', { headers: { authorization: `Bearer ${token}` }, cache: 'no-store' });
+        const res = await fetch('/api/auth/me', { cache:'no-store' });
+        if (!res.ok) throw new Error('Nicht eingeloggt');
         const j = await res.json();
-        if (!res.ok) throw new Error(j?.error || 'Konnte Benutzer nicht laden');
         if (alive) setMe(j);
       } catch (e) {
         if (alive) setErr(e?.message || String(e));
       }
-    }
-    load();
+    })();
     return () => { alive = false; };
-  }, [supabase]);
+  }, []);
 
-  function signOut(e) {
-    e?.preventDefault?.();
-    // Don't await: in some environments signOut can hang on network revocation.
-    try { supabase.auth.signOut(); } catch {}
-    window.location.href = '/login';
+  if (err) {
+    return (
+      <div className="error">
+        {err}
+        <div style={{ marginTop:10 }}>
+          <a className="secondary" href="/login" style={{ textDecoration:'none' }}>Zum Login</a>
+        </div>
+      </div>
+    );
   }
 
-  const isAdmin = !!me?.isAdmin;
-  const groupName = me?.group?.name || '—';
+  const profile = me?.profile;
+  const group = me?.group;
 
   return (
-    <div className="grid">
+    <div style={{ display:'grid', gap:14 }}>
       <div className="card">
-        <h1 className="h1">Einstellungen</h1>
-        <p className="sub">Wie beim iPhone: Bereiche, die für deine Gruppe sichtbar sind.</p>
-
-        {err ? <div className="error">{err}</div> : null}
-
-        <div className="settings-section" style={{ marginTop: 14 }}>
-          <div className="settings-header">Account</div>
-          <Row href="/users" icon="👤" title="Profil" subtitle={me?.profile?.email || '—'} />
-          <div className="sub" style={{ marginTop: 10 }}>Gruppe: <b>{groupName}</b></div>
-          <div className="row" style={{ marginTop: 12 }}>
-            <button type="button" className="secondary" onClick={signOut} style={{ padding: '10px 12px' }}>Logout</button>
-            <a className="secondary" href="/" style={{ padding: '10px 12px', borderRadius: 14, border: '1px solid rgba(17,24,39,.12)' }}>Homescreen</a>
-          </div>
-        </div>
-
-        <div className="settings-section" style={{ marginTop: 14 }}>
-          <div className="settings-header">Apps</div>
-          <Row href="/" icon="🧩" title="Homescreen" subtitle="Apps & Dock" />
-        </div>
-
-        {isAdmin ? (
-          <div className="settings-section" style={{ marginTop: 14 }}>
-            <div className="settings-header">Admin</div>
-            <Row href="/admin/apps" icon="🛠️" title="Apps verwalten" subtitle="Sichtbarkeit & Dock" />
-            <Row href="/admin/installer" icon="📦" title="Installer" subtitle="Pakete installieren" />
-            <Row href="/admin" icon="🧨" title="Admin Bereich" subtitle="Tools & Uploads" />
-          </div>
-        ) : null}
+        <div className="h1">Einstellungen</div>
+        <div className="sub">iPhone-Style Settings</div>
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Hinweis</h2>
-        <p className="sub">
-          Ziel: Apps werden im Admin-Bereich angelegt (Supabase). Danach erscheinen sie automatisch auf dem Homescreen,
-          ohne Code-Änderung – solange es ein „Link“-App ist oder eine Standard-App-Template nutzt.
-        </p>
+        <div className="row" style={{ justifyContent:'space-between' }}>
+          <div>
+            <div style={{ fontWeight:800 }}>{profile?.display_name || profile?.email || me?.user?.email || '—'}</div>
+            <div className="muted" style={{ fontSize:12 }}>{me?.user?.email || '—'}</div>
+            <div className="muted" style={{ fontSize:12 }}>Gruppe: {group?.name || '—'} · Admin: {me?.isAdmin ? 'Ja' : 'Nein'}</div>
+          </div>
+          <form action="/api/auth/logout" method="post">
+            <button className="secondary" type="submit">Logout</button>
+          </form>
+        </div>
+      </div>
+
+      <div className="card">
+        <div style={{ fontWeight:800, marginBottom:8 }}>Apps</div>
+        <div className="row" style={{ flexWrap:'wrap' }}>
+          <a className="secondary" href="/" style={{ textDecoration:'none' }}>Home</a>
+          <a className="secondary" href="/users" style={{ textDecoration:'none' }}>Profil</a>
+          {me?.isAdmin ? (
+            <>
+              <a className="secondary" href="/admin/installer" style={{ textDecoration:'none' }}>Installer</a>
+              <a className="secondary" href="/admin/apps" style={{ textDecoration:'none' }}>Admin Apps</a>
+            </>
+          ) : null}
+        </div>
+        {!me?.isAdmin ? (
+          <div className="muted" style={{ marginTop:10, fontSize:12 }}>
+            Admin-Seiten sind nur für Emails aus <code>ADMIN_EMAILS</code> sichtbar.
+          </div>
+        ) : null}
       </div>
     </div>
   );
