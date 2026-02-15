@@ -161,12 +161,14 @@ export default function DealersMapPage() {
         </div>
 
         {!visible.length ? (
-          <div className="muted" style={{ marginTop: 10 }}>Keine Händler im aktuellen Ausschnitt.</div>
+          <>
+            <div className="muted" style={{ marginTop: 10 }}>Keine Händler im aktuellen Ausschnitt.</div>
             {(!loading && (all || []).length === 0) ? (
               <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
                 Hinweis: Wenn du sicher bist, dass Koordinaten vorhanden sind, prüfe bitte im Admin-Bereich bei <strong>Dataset → Händler → Geodaten</strong> die Lat/Lng-Spalten (z.B. <code>lat</code> und <code>ln</code>/<code>lng</code>).
               </div>
             ) : null}
+          </>
         ) : (
           <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
             {visible.slice(0, 250).map((m) => (
