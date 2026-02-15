@@ -78,6 +78,25 @@ Wenn Import/Log Fehler wie „relation … does not exist“ melden:
 Für die neuen Schema-Funktionen brauchst du die aktualisierten Import-Tabellen:
 - Im Admin → Installer: Beispiel **03 import tables** erneut ausführen (idempotent)
   - fügt `dataset_schemas` hinzu
+
+## UI/Apps Updates (2026-02-15.6)
+
+- **Händlerliste** (`/database`): Suchfeld zum Filtern der geladenen Zeilen.
+- **Listen optional gruppieren** (z.B. Rückstand nach Auftragsnummer):
+  - Admin → **Dataset Einstellungen** (`/admin/datasets`)
+  - pro Dataset: „Listenansicht → Gruppierte Ansicht aktivieren“ + „Gruppieren nach …“
+- **Rückstand auf Händlerseite gruppieren**:
+  - Admin → **Händlerseite** (`/admin/dealer-view`)
+  - „Rückstand auf Händlerseite gruppieren“ + „Gruppieren nach …“ (z.B. Auftragsnummer)
+- **Lagerbestand flexibel filtern**:
+  - Admin → Dataset Einstellungen → **inventory**
+  - Filter-Regeln (mehrere Kriterien, UND-Verknüpfung), werden auf `/inventory` angewendet
+- Admin-Log Bugfix: `page-config` schreibt wieder korrekt ins Admin-Log (Undo möglich).
+
+### SQL
+
+Für diese Änderungen ist **keine neue SQL-Struktur** nötig (nur JSON-Konfigurationen). Falls dir jedoch noch Tabellen fehlen:
+- Admin → Installer → Beispiel **03 import tables** ausführen.
   - ergänzt `dataset_imports` um `column_types` + `save_schema`
 
 ## UI/Apps Updates (2026-02-15.5)
@@ -98,3 +117,41 @@ Für die neuen Schema-Funktionen brauchst du die aktualisierten Import-Tabellen:
 Für Join/Labels/Views + Händlerseite braucht `supabase/import_tables.sql` erneut auszuführen (idempotent):
 - `dataset_schemas` bekommt neue Spalten: `column_labels`, `joins`, `view_config`
 - neue Tabelle: `page_configs` (z.B. `dealer_view`)
+
+## UI/Apps Updates (2026-02-15.7)
+
+- **Händlerkarte** (OpenStreetMap/Leaflet) ist jetzt die Standard-Ansicht auf `/database`.
+  - Marker sind anklickbar → Link zur Händler-Übersichtsseite `/dealers/[id]`.
+  - **Liste** zeigt **nur Händler im aktuellen Kartenausschnitt**.
+  - Toggle: **„Nur Händler mit Rückstand“** (ermittelt via `dealer_view` Keys `dealer_key`/`backlog_key`).
+- Neue API: `GET /api/dealers/map`
+  - liefert alle Händler mit Koordinaten (plus `hasBacklog`).
+  - Fallback-Key-Erkennung für `lat/lng` falls Spalten anders heißen.
+
+## UI/Apps Updates (2026-02-15.8)
+
+- Admin → **Dataset Einstellungen** → Dataset **dealers**:
+  - neue Sektion **„Geodaten (Karte)“**
+  - Modus: **Auto** oder **Manuell (Lat/Lng Spalten wählen)**
+  - Buttons: „Vorschlag setzen“ + „Lat/Lng tauschen“
+- Händlerkarte (`/database`) nutzt nun – falls gesetzt – die konfigurierten Spalten aus `dataset_schemas.view_config.geo`.
+
+## UI/Apps Updates (2026-02-15.9)
+
+- **Apps/Listen:** keine „Spalten/Typen“/„Import“-Links mehr in den normalen Apps. Konfiguration nur noch im Admin.
+- **Header:** bleibt in **einer Zeile** und passt sich der Browserbreite an (ohne Umbruch).
+- **Admin → Hersteller & Einkaufsverbände** (`/admin/brands`):
+  - Hersteller + Einkaufsverbände anlegen/bearbeiten/löschen inkl. **Piktogramm Upload**.
+  - Aktionen werden im Admin‑Log erfasst (Undo möglich).
+- **Admin → Dataset Einstellungen → dealers:** neue Sektion **Hersteller & Einkaufsverbände**
+  - einstellen, aus welcher Spalte (oder aus mehreren Spalten) Hersteller‑Keys gelesen werden
+  - optionale Spalte für Einkaufsverband
+  - inkl. Vorschau
+- **Händlerkarte + Händlerdetail:** zeigt Piktogramme (Hersteller links, Einkaufsverband rechts)
+  - Marker‑Popup + Händlerliste + Händlerdetail nutzen die hinterlegten Keys
+
+### SQL
+
+Für Hersteller/Einkaufsverbände werden neue Tabellen benötigt:
+- Admin → Installer → Beispiel **04 manufacturers + buying groups** ausführen.
+  - legt `manufacturers` und `buying_groups` an

@@ -1,4 +1,5 @@
 import './globals.css';
+import 'leaflet/dist/leaflet.css';
 import Shell from './ui/Shell';
 
 export const metadata = {

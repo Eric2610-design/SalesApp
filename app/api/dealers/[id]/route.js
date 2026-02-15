@@ -7,6 +7,64 @@ function normKey(v) {
   return String(v).trim().toLowerCase();
 }
 
+function slugKey(v) {
+  if (v == null) return '';
+  return String(v)
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function isTruthy(v) {
+  if (v == null) return false;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return false;
+  return !['0', 'false', 'nein', 'no', 'n', '-'].includes(s);
+}
+
+function parseBrandKeys(obj, brandsCfg) {
+  const cfg = (brandsCfg && typeof brandsCfg === 'object') ? brandsCfg : {};
+  const mode = String(cfg.manufacturer_mode || 'list');
+  const field = String(cfg.manufacturer_field || '');
+  const sep = String(cfg.manufacturer_separator || '[,;|]');
+  const fields = Array.isArray(cfg.manufacturer_fields) ? cfg.manufacturer_fields : [];
+
+  if (mode === 'none') return [];
+  if (mode === 'columns') {
+    const out = [];
+    for (const f of fields) {
+      if (isTruthy(obj?.[f])) out.push(slugKey(f));
+    }
+    return Array.from(new Set(out)).filter(Boolean);
+  }
+
+  if (!field) return [];
+  const raw = obj?.[field];
+  if (Array.isArray(raw)) return raw.map(slugKey).filter(Boolean);
+  if (raw == null) return [];
+  let re = /[,;|]/;
+  try { re = new RegExp(sep); } catch {}
+  const parts = String(raw).split(re).map((s) => slugKey(s)).filter(Boolean);
+  return Array.from(new Set(parts));
+}
+
+function parseBuyingGroupKey(obj, brandsCfg) {
+  const cfg = (brandsCfg && typeof brandsCfg === 'object') ? brandsCfg : {};
+  const field = String(cfg.buying_group_field || '').trim();
+  if (!field) return '';
+  const raw = obj?.[field];
+  if (raw == null) return '';
+  return slugKey(raw);
+}
+
 async function getLatestImport(admin, dataset) {
   const { data, error } = await admin
     .from('dataset_imports')
@@ -89,6 +147,14 @@ export async function GET(req, ctx) {
     const backlogKey = cfg.backlog_key || 'Kundennummer';
     const dealerVal = dealer.row_data?.[dealerKey];
 
+    const brandsCfg = (dealersSchema?.view_config?.brands && typeof dealersSchema.view_config.brands === 'object')
+      ? dealersSchema.view_config.brands
+      : {};
+    const brands = {
+      manufacturer_keys: parseBrandKeys(dealer.row_data || {}, brandsCfg),
+      buying_group_key: parseBuyingGroupKey(dealer.row_data || {}, brandsCfg)
+    };
+
     let backlogRows = [];
     if (cfg.backlog_enabled !== false && backlogImp?.id && dealerVal != null && String(dealerVal).trim() !== '') {
       const { data: rawBacklog, error: bErr } = await admin
@@ -108,10 +174,13 @@ export async function GET(req, ctx) {
       backlog_rows: backlogRows,
       backlog_schema: backlogSchema,
       backlog_import: backlogImp,
+      brands,
       config: {
         dealer_key: dealerKey,
         backlog_key: backlogKey,
         backlog_enabled: cfg.backlog_enabled !== false,
+        backlog_group_enabled: cfg.backlog_group_enabled === true,
+        backlog_group_by: cfg.backlog_group_by || '',
         dealer_columns: Array.isArray(cfg.dealer_columns) ? cfg.dealer_columns : null,
         backlog_columns: Array.isArray(cfg.backlog_columns) ? cfg.backlog_columns : null
       }

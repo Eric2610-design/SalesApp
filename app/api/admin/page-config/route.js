@@ -52,11 +52,10 @@ export async function POST(req) {
   const { error } = await admin.from('page_configs').upsert(nextRow, { onConflict: 'key' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await writeAdminLog({
-    admin,
-    actor: me.profile?.email || me.user?.email,
+  await writeAdminLog(admin, me, {
     action: 'update_page_config',
-    details: { key, config },
+    target: key,
+    payload: { key, config },
     undo: undoRestorePageConfig(key, previousRow)
   });
 

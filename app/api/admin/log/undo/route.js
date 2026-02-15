@@ -71,6 +71,38 @@ async function undoAction(admin, undo) {
     return { ok: true, result: { type, key, restored: true } };
   }
 
+  if (type === 'restore_manufacturer') {
+    const key = String(undo.key || '').trim();
+    if (!key) throw new Error('Undo missing key');
+    const prev = undo.previous_row;
+
+    if (!prev) {
+      const { error } = await admin.from('manufacturers').delete().eq('key', key);
+      if (error) throw new Error(error.message);
+      return { ok: true, result: { type, key, restored: 'deleted' } };
+    }
+
+    const { error } = await admin.from('manufacturers').upsert(prev, { onConflict: 'key' });
+    if (error) throw new Error(error.message);
+    return { ok: true, result: { type, key, restored: true } };
+  }
+
+  if (type === 'restore_buying_group') {
+    const key = String(undo.key || '').trim();
+    if (!key) throw new Error('Undo missing key');
+    const prev = undo.previous_row;
+
+    if (!prev) {
+      const { error } = await admin.from('buying_groups').delete().eq('key', key);
+      if (error) throw new Error(error.message);
+      return { ok: true, result: { type, key, restored: 'deleted' } };
+    }
+
+    const { error } = await admin.from('buying_groups').upsert(prev, { onConflict: 'key' });
+    if (error) throw new Error(error.message);
+    return { ok: true, result: { type, key, restored: true } };
+  }
+
   throw new Error('Unsupported undo type');
 }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { formatCell } from '@/lib/typeDetect';
+import { formatCell, parseNumberSmart, parseDateSmart } from '@/lib/typeDetect';
 
 function collectColumns(rows, maxRows = 120) {
   const keys = new Set();
@@ -43,17 +43,78 @@ export default function InventoryBoard() {
   const typeMap = schema?.column_types || data?.import?.column_types || {};
   const labelMap = schema?.column_labels || {};
 
+  const filters = useMemo(() => {
+    const vc = schema?.view_config;
+    const f = (vc && typeof vc === 'object') ? vc.filters : null;
+    return Array.isArray(f) ? f : [];
+  }, [schema]);
+
+  function passesRule(row, rule) {
+    const field = String(rule?.field || '').trim();
+    const op = String(rule?.op || '').trim();
+    const value = rule?.value;
+    if (!field || !op) return true;
+    const cell = (row?.row_data || {})[field];
+    const cellStr = cell == null ? '' : String(cell);
+    const cellNorm = cellStr.trim().toLowerCase();
+    const valStr = value == null ? '' : String(value);
+    const valNorm = valStr.trim().toLowerCase();
+
+    if (op === 'is_empty') return cellStr == null || cellStr.trim() === '';
+    if (op === 'is_not_empty') return !(cellStr == null || cellStr.trim() === '');
+
+    if (op === 'contains') return cellNorm.includes(valNorm);
+    if (op === 'not_contains') return !cellNorm.includes(valNorm);
+    if (op === 'starts_with') return cellNorm.startsWith(valNorm);
+    if (op === 'ends_with') return cellNorm.endsWith(valNorm);
+    if (op === 'eq') return cellNorm === valNorm;
+    if (op === 'neq') return cellNorm !== valNorm;
+
+    if (op === 'in') {
+      const set = new Set(valStr.split(',').map((x) => x.trim().toLowerCase()).filter(Boolean));
+      if (!set.size) return true;
+      return set.has(cellNorm);
+    }
+
+    // numeric/date comparisons
+    const aNum = parseNumberSmart(cell).ok ? parseNumberSmart(cell).value : NaN;
+    const bNum = parseNumberSmart(value).ok ? parseNumberSmart(value).value : NaN;
+
+    if (Number.isFinite(aNum) && Number.isFinite(bNum)) {
+      if (op === 'gt') return aNum > bNum;
+      if (op === 'gte') return aNum >= bNum;
+      if (op === 'lt') return aNum < bNum;
+      if (op === 'lte') return aNum <= bNum;
+    }
+
+    const aDate = parseDateSmart(cell)?.date?.getTime?.();
+    const bDate = parseDateSmart(value)?.date?.getTime?.();
+    if (Number.isFinite(aDate) && Number.isFinite(bDate)) {
+      if (op === 'gt') return aDate > bDate;
+      if (op === 'gte') return aDate >= bDate;
+      if (op === 'lt') return aDate < bDate;
+      if (op === 'lte') return aDate <= bDate;
+    }
+
+    return true;
+  }
+
+  const filteredRows = useMemo(() => {
+    if (!filters.length) return rows;
+    return rows.filter((r) => filters.every((f) => passesRule(r, f)));
+  }, [rows, filters]);
+
   const columns = useMemo(() => {
     const base = Array.isArray(schema?.display_columns) ? schema.display_columns : null;
-    const fromRows = collectColumns(rows);
+    const fromRows = collectColumns(filteredRows);
     const list = (base && base.length ? base : fromRows);
     return list;
-  }, [rows, schema]);
+  }, [filteredRows, schema]);
 
   const groupOptions = useMemo(() => {
-    const opts = collectColumns(rows).sort((a, b) => a.localeCompare(b));
+    const opts = collectColumns(filteredRows).sort((a, b) => a.localeCompare(b));
     return opts;
-  }, [rows]);
+  }, [filteredRows]);
 
   const effectiveGroupBy = groupBy || groupOptions[0] || '';
   const effectiveItemFields = itemFields.length ? itemFields : columns.slice(0, 3);
@@ -61,7 +122,7 @@ export default function InventoryBoard() {
   const groups = useMemo(() => {
     if (!effectiveGroupBy) return [];
     const map = new Map();
-    for (const r of rows) {
+    for (const r of filteredRows) {
       const v = (r.row_data || {})[effectiveGroupBy];
       const key = (v == null || String(v).trim() === '') ? '(leer)' : String(v);
       if (!map.has(key)) map.set(key, []);
@@ -74,7 +135,7 @@ export default function InventoryBoard() {
       out = out.filter((g) => g.key.toLowerCase().includes(qq));
     }
     return out;
-  }, [rows, effectiveGroupBy, q]);
+  }, [filteredRows, effectiveGroupBy, q]);
 
   if (err) {
     return <div className="error">{err}</div>;
@@ -98,6 +159,12 @@ export default function InventoryBoard() {
       <div className="card">
         <div className="h1">Lagerbestand</div>
         <div className="sub">Kacheln (gruppiert) oder Liste – ohne horizontales Scrollen.</div>
+
+        {filters.length ? (
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Filter aktiv: <strong>{filteredRows.length}</strong> / {rows.length} Zeilen
+          </div>
+        ) : null}
 
         <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div style={{ minWidth: 160 }}>
@@ -161,7 +228,7 @@ export default function InventoryBoard() {
               </tr>
             </thead>
             <tbody>
-              {rows.slice(0, 200).map((r) => (
+              {filteredRows.slice(0, 200).map((r) => (
                 <tr key={r.row_index}>
                   <td className="muted">{r.row_index + 1}</td>
                   {columns.slice(0, 14).map((c) => <td key={c}>{formatCell((r.row_data || {})[c], typeMap?.[c])}</td>)}

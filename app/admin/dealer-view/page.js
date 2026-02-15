@@ -23,6 +23,8 @@ export default function AdminDealerViewPage() {
     dealer_key: '',
     backlog_key: '',
     backlog_enabled: true,
+    backlog_group_enabled: false,
+    backlog_group_by: '',
     dealer_columns: [],
     backlog_columns: []
   });
@@ -58,6 +60,8 @@ export default function AdminDealerViewPage() {
           dealer_key: existing.dealer_key || '',
           backlog_key: existing.backlog_key || '',
           backlog_enabled: existing.backlog_enabled !== false,
+          backlog_group_enabled: existing.backlog_group_enabled === true,
+          backlog_group_by: existing.backlog_group_by || '',
           dealer_columns: Array.isArray(existing.dealer_columns) ? existing.dealer_columns : [],
           backlog_columns: Array.isArray(existing.backlog_columns) ? existing.backlog_columns : []
         });
@@ -159,6 +163,34 @@ export default function AdminDealerViewPage() {
             <input type="checkbox" checked={cfg.backlog_enabled !== false} onChange={(e) => setCfg({ ...cfg, backlog_enabled: e.target.checked })} />
             <span className="muted" style={{ fontSize: 12 }}>Rückstand anzeigen</span>
           </label>
+        </div>
+
+        <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <label style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={cfg.backlog_group_enabled === true}
+              onChange={(e) => setCfg({ ...cfg, backlog_group_enabled: e.target.checked })}
+            />
+            <span className="muted" style={{ fontSize: 12 }}>Rückstand auf Händlerseite gruppieren</span>
+          </label>
+
+          <div style={{ minWidth: 260 }}>
+            <div className="label">Gruppieren nach</div>
+            <select
+              className="input"
+              value={cfg.backlog_group_by || ''}
+              onChange={(e) => setCfg({ ...cfg, backlog_group_by: e.target.value })}
+              disabled={!cfg.backlog_group_enabled}
+            >
+              <option value="">(bitte wählen)</option>
+              {backlogCols.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+
+          <div className="muted" style={{ fontSize: 12 }}>
+            Tipp: meistens <strong>Auftragsnummer</strong> / <strong>Order</strong>.
+          </div>
         </div>
       </div>
 

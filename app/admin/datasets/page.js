@@ -36,6 +36,29 @@ function guessTypeFromRows(rows, col) {
   return inferTypeFromSamples(sample, col);
 }
 
+function slugKey(v) {
+  if (v == null) return '';
+  return String(v)
+    .trim()
+    .toLowerCase()
+    .replace(/ä/g, 'ae')
+    .replace(/ö/g, 'oe')
+    .replace(/ü/g, 'ue')
+    .replace(/ß/g, 'ss')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function isTruthy(v) {
+  if (v == null) return false;
+  if (typeof v === 'boolean') return v;
+  if (typeof v === 'number') return v !== 0;
+  const s = String(v).trim().toLowerCase();
+  if (!s) return false;
+  return !['0', 'false', 'nein', 'no', 'n', '-'].includes(s);
+}
+
 export default function AdminDatasetsPage() {
   const [err, setErr] = useState('');
   const [dataset, setDataset] = useState('dealers');
@@ -52,8 +75,28 @@ export default function AdminDatasetsPage() {
 
   const [otherCols, setOtherCols] = useState({ dealers: [], backlog: [], inventory: [] });
 
+  const [brandsMeta, setBrandsMeta] = useState({ manufacturers: [], buying_groups: [], error: '' });
+
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+
+  // Load manufacturers / buying groups for previews (best effort)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/brands', { cache: 'no-store' });
+        const j = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(j?.error || 'Brands laden fehlgeschlagen');
+        if (!alive) return;
+        setBrandsMeta({ manufacturers: j?.manufacturers || [], buying_groups: j?.buying_groups || [], error: '' });
+      } catch (e) {
+        if (!alive) return;
+        setBrandsMeta({ manufacturers: [], buying_groups: [], error: e?.message || String(e) });
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   // dataset from query param
   useEffect(() => {
@@ -173,6 +216,77 @@ export default function AdminDatasetsPage() {
     return [...order, ...missing];
   }, [displayOrder, displayCols, columns]);
 
+  const brandsCfg = useMemo(() => {
+    const b = viewConfig?.brands;
+    return (b && typeof b === 'object') ? b : {};
+  }, [viewConfig]);
+
+  const manufacturerMode = String(brandsCfg.manufacturer_mode || 'list');
+  const manufacturerField = String(brandsCfg.manufacturer_field || '');
+  const manufacturerSep = String(brandsCfg.manufacturer_separator || '[,;|]');
+  const manufacturerFields = Array.isArray(brandsCfg.manufacturer_fields) ? brandsCfg.manufacturer_fields : [];
+  const buyingGroupField = String(brandsCfg.buying_group_field || '');
+
+  const mIconByKey = useMemo(() => {
+    const m = new Map();
+    for (const x of (brandsMeta.manufacturers || [])) {
+      const k = slugKey(x?.key);
+      if (k) m.set(k, x?.icon_data || '');
+    }
+    return m;
+  }, [brandsMeta.manufacturers]);
+
+  const bgIconByKey = useMemo(() => {
+    const m = new Map();
+    for (const x of (brandsMeta.buying_groups || [])) {
+      const k = slugKey(x?.key);
+      if (k) m.set(k, x?.icon_data || '');
+    }
+    return m;
+  }, [brandsMeta.buying_groups]);
+
+  const brandsPreview = useMemo(() => {
+    if (dataset !== 'dealers') return [];
+    const out = [];
+    const re = (() => {
+      try { return new RegExp(manufacturerSep); } catch { return /[,;|]/; }
+    })();
+
+    const parseM = (obj) => {
+      if (manufacturerMode === 'none') return [];
+      if (manufacturerMode === 'columns') {
+        const ks = [];
+        for (const f of (manufacturerFields || [])) {
+          if (isTruthy(obj?.[f])) ks.push(slugKey(f));
+        }
+        return Array.from(new Set(ks)).filter(Boolean);
+      }
+      // list
+      const raw = obj?.[manufacturerField];
+      if (Array.isArray(raw)) return raw.map(slugKey).filter(Boolean);
+      if (raw == null) return [];
+      const parts = String(raw).split(re).map((s) => slugKey(s)).filter(Boolean);
+      return Array.from(new Set(parts));
+    };
+
+    const parseBG = (obj) => {
+      const raw = obj?.[buyingGroupField];
+      if (raw == null) return '';
+      return slugKey(raw);
+    };
+
+    for (const r of (rows || []).slice(0, 6)) {
+      const obj = r?.row_data || {};
+      out.push({
+        row_index: r?.row_index,
+        name: obj?.Name || obj?.Firmenname || obj?.Firma || obj?.Händlername || obj?.Haendlername || obj?.Shop || obj?.Store || obj?.company || `Händler #${(r?.row_index ?? 0) + 1}`,
+        manufacturers: parseM(obj),
+        buying_group: parseBG(obj)
+      });
+    }
+    return out;
+  }, [dataset, rows, manufacturerMode, manufacturerField, manufacturerSep, manufacturerFields, buyingGroupField]);
+
   function setAllDisplay(v) {
     const next = { ...displayCols };
     columns.forEach((c) => (next[c] = v));
@@ -281,6 +395,69 @@ export default function AdminDatasetsPage() {
     for (const k of asKeys) toggleDisplay(k, false);
   }
 
+  // List grouping (used by DatasetViewer)
+  const listGroupEnabled = dataset !== 'inventory' && viewConfig?.list_group_enabled === true;
+  const listGroupBy = String(viewConfig?.list_group_by || '').trim();
+
+  // Dealers geo config (used by Dealer map)
+  const geoCfg = (viewConfig?.geo && typeof viewConfig.geo === 'object') ? viewConfig.geo : {};
+  const geoMode = String(geoCfg?.mode || 'auto');
+  const geoLatField = String(geoCfg?.lat_field || '');
+  const geoLngField = String(geoCfg?.lng_field || '');
+
+  function suggestGeoFields() {
+    const cols = columns || [];
+    const pick = (preds) => {
+      for (const re of preds) {
+        const hit = cols.find((c) => re.test(String(c)));
+        if (hit) return hit;
+      }
+      return '';
+    };
+    const lat = pick([/^lat$/i, /^latitude$/i, /lat/i, /breit/i, /y$/i]);
+    const lng = pick([/^(lng|lon|longitude)$/i, /(lng|lon|long)/i, /l[aä]ng/i, /x$/i]);
+    setViewConfig({
+      ...viewConfig,
+      geo: { ...geoCfg, mode: 'manual', lat_field: lat || geoLatField, lng_field: lng || geoLngField }
+    });
+  }
+
+  function swapGeoFields() {
+    setViewConfig({ ...viewConfig, geo: { ...geoCfg, mode: 'manual', lat_field: geoLngField, lng_field: geoLatField } });
+  }
+
+  // Inventory filter builder
+  const invFilters = useMemo(() => {
+    const f = viewConfig?.filters;
+    return Array.isArray(f) ? f : [];
+  }, [viewConfig]);
+
+  const [filterDraft, setFilterDraft] = useState({ field: '', op: 'contains', value: '' });
+
+  function addFilterRule() {
+    if (!filterDraft.field || !filterDraft.op) {
+      setMsg('Bitte Filter-Feld und Operator wählen.');
+      return;
+    }
+    const next = [...invFilters, { field: filterDraft.field, op: filterDraft.op, value: filterDraft.value }];
+    setViewConfig({ ...viewConfig, filters: next });
+    setFilterDraft({ field: '', op: 'contains', value: '' });
+  }
+
+  function removeFilterRule(i) {
+    const next = invFilters.filter((_, idx) => idx !== i);
+    setViewConfig({ ...viewConfig, filters: next });
+  }
+
+  function moveFilterRule(i, dir) {
+    const next = invFilters.slice(0);
+    const ni = Math.max(0, Math.min(next.length - 1, i + dir));
+    if (ni === i) return;
+    const [it] = next.splice(i, 1);
+    next.splice(ni, 0, it);
+    setViewConfig({ ...viewConfig, filters: next });
+  }
+
   if (err) {
     return (
       <div className="card">
@@ -375,6 +552,340 @@ export default function AdminDatasetsPage() {
             <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
               Tipp: Für dein Beispiel <em>Modell</em> als Gruppe und <em>Artikelnummer</em> als Inhalt.
             </div>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>Filter (optional)</div>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+              Zeige nur Datensätze, die <strong>alle</strong> Regeln erfüllen (UND). Regeln werden auf <code>/inventory</code> angewendet.
+            </div>
+
+            {invFilters.length ? (
+              <div style={{ display: 'grid', gap: 8, marginBottom: 10 }}>
+                {invFilters.map((f, idx) => (
+                  <div key={idx} className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ minWidth: 240, fontWeight: 700 }}>{f.field}</div>
+                    <div className="muted" style={{ minWidth: 140, fontSize: 12 }}>{f.op}</div>
+                    <div style={{ flex: 1, minWidth: 240 }}>
+                      <input
+                        className="input"
+                        value={String(f.value ?? '')}
+                        onChange={(e) => {
+                          const next = invFilters.slice(0);
+                          next[idx] = { ...next[idx], value: e.target.value };
+                          setViewConfig({ ...viewConfig, filters: next });
+                        }}
+                        placeholder="Wert"
+                      />
+                    </div>
+                    <div className="row" style={{ gap: 6 }}>
+                      <button className="secondary" type="button" onClick={() => moveFilterRule(idx, -1)} disabled={busy}>↑</button>
+                      <button className="secondary" type="button" onClick={() => moveFilterRule(idx, +1)} disabled={busy}>↓</button>
+                      <button className="secondary" type="button" onClick={() => removeFilterRule(idx)} disabled={busy}>Entfernen</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>Keine Filterregeln gesetzt.</div>
+            )}
+
+            <div className="card" style={{ padding: 12 }}>
+              <div style={{ fontWeight: 800, marginBottom: 8 }}>Neue Filterregel</div>
+              <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div style={{ minWidth: 220 }}>
+                  <div className="label">Feld</div>
+                  <select className="input" value={filterDraft.field} onChange={(e) => setFilterDraft({ ...filterDraft, field: e.target.value })}>
+                    <option value="">(wählen)</option>
+                    {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ minWidth: 200 }}>
+                  <div className="label">Operator</div>
+                  <select className="input" value={filterDraft.op} onChange={(e) => setFilterDraft({ ...filterDraft, op: e.target.value })}>
+                    <option value="contains">enthält</option>
+                    <option value="not_contains">enthält nicht</option>
+                    <option value="eq">gleich</option>
+                    <option value="neq">ungleich</option>
+                    <option value="starts_with">beginnt mit</option>
+                    <option value="ends_with">endet mit</option>
+                    <option value="gt">größer als</option>
+                    <option value="gte">größer/gleich</option>
+                    <option value="lt">kleiner als</option>
+                    <option value="lte">kleiner/gleich</option>
+                    <option value="in">in Liste (Komma)</option>
+                    <option value="is_empty">ist leer</option>
+                    <option value="is_not_empty">ist nicht leer</option>
+                  </select>
+                </div>
+                <div style={{ flex: 1, minWidth: 240 }}>
+                  <div className="label">Wert</div>
+                  <input
+                    className="input"
+                    value={filterDraft.value}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, value: e.target.value })}
+                    placeholder="z.B. Bosch, > 0, 12345"
+                    disabled={filterDraft.op === 'is_empty' || filterDraft.op === 'is_not_empty'}
+                  />
+                </div>
+                <button className="primary" type="button" onClick={addFilterRule} disabled={busy}>Hinzufügen</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* List view config (DatasetViewer) */}
+      {dataset !== 'inventory' ? (
+        <div className="card">
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>{dsTitle} · Listenansicht</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Steuert die Darstellung auf der jeweiligen Seite (<code>/{dataset === 'dealers' ? 'database' : dataset}</code>).
+          </div>
+
+          <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <label style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+              <input
+                type="checkbox"
+                checked={listGroupEnabled}
+                onChange={(e) => setViewConfig({ ...viewConfig, list_group_enabled: e.target.checked })}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>Gruppierte Ansicht aktivieren</span>
+            </label>
+
+            <div style={{ minWidth: 260 }}>
+              <div className="label">Gruppieren nach</div>
+              <select
+                className="input"
+                value={listGroupBy}
+                onChange={(e) => setViewConfig({ ...viewConfig, list_group_by: e.target.value })}
+                disabled={!listGroupEnabled}
+              >
+                <option value="">(bitte wählen)</option>
+                {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Beispiel: Rückstand nach <strong>Auftragsnummer</strong>.
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Dealers geo config */}
+      {dataset === 'dealers' ? (
+        <div className="card">
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Händler · Geodaten (Karte)</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Steuert, welche Spalten als <strong>Lat/Lng</strong> für die Händlerkarte verwendet werden. Wenn „Auto“ aktiv ist, wird versucht die Spalten automatisch zu erkennen.
+          </div>
+
+          <div className="row" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 12 }}>
+            <label style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+              <input
+                type="radio"
+                name="geoMode"
+                checked={geoMode !== 'manual'}
+                onChange={() => setViewConfig({ ...viewConfig, geo: { ...geoCfg, mode: 'auto', lat_field: '', lng_field: '' } })}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>Auto (empfohlen)</span>
+            </label>
+            <label style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
+              <input
+                type="radio"
+                name="geoMode"
+                checked={geoMode === 'manual'}
+                onChange={() => setViewConfig({ ...viewConfig, geo: { ...geoCfg, mode: 'manual', lat_field: geoLatField, lng_field: geoLngField } })}
+              />
+              <span className="muted" style={{ fontSize: 12 }}>Manuell festlegen</span>
+            </label>
+
+            <button className="secondary" type="button" onClick={suggestGeoFields} disabled={busy}>
+              Vorschlag setzen
+            </button>
+            <button className="secondary" type="button" onClick={swapGeoFields} disabled={busy || geoMode !== 'manual'}>
+              Lat/Lng tauschen
+            </button>
+          </div>
+
+          <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 240 }}>
+              <div className="label">Lat-Spalte</div>
+              <select
+                className="input"
+                value={geoLatField}
+                disabled={geoMode !== 'manual'}
+                onChange={(e) => setViewConfig({ ...viewConfig, geo: { ...geoCfg, mode: 'manual', lat_field: e.target.value, lng_field: geoLngField } })}
+              >
+                <option value="">(wählen)</option>
+                {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div style={{ minWidth: 240 }}>
+              <div className="label">Lng-Spalte</div>
+              <select
+                className="input"
+                value={geoLngField}
+                disabled={geoMode !== 'manual'}
+                onChange={(e) => setViewConfig({ ...viewConfig, geo: { ...geoCfg, mode: 'manual', lat_field: geoLatField, lng_field: e.target.value } })}
+              >
+                <option value="">(wählen)</option>
+                {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+            Hinweis: Werte dürfen als Text mit „,“ oder „.“ kommen – die Karte akzeptiert beides. Lat muss zwischen -90..90 und Lng zwischen -180..180 liegen.
+          </div>
+        </div>
+      ) : null}
+
+      {/* Dealers brand icons config */}
+      {dataset === 'dealers' ? (
+        <div className="card">
+          <div style={{ fontWeight: 800, marginBottom: 8 }}>Händler · Hersteller & Einkaufsverbände (Piktogramme)</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+            Hier stellst du ein, aus welchen Spalten die App die Hersteller‑Keys und den Einkaufsverband liest. Die Keys sollten zu den Einträgen unter <code>Admin → Hersteller & Einkaufsverbände</code> passen.
+          </div>
+
+          {brandsMeta.error ? (
+            <div className="error" style={{ marginBottom: 10 }}>
+              Brands konnten nicht geladen werden: {brandsMeta.error}
+              <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+                Hinweis: Falls die Tabellen noch nicht existieren, bitte im <code>Admin → Installer</code> das Script <strong>04 manufacturers + buying groups</strong> ausführen.
+              </div>
+            </div>
+          ) : null}
+
+          <div className="row" style={{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 220 }}>
+              <div className="label">Hersteller‑Erkennung</div>
+              <select
+                className="input"
+                value={manufacturerMode}
+                onChange={(e) => setViewConfig({
+                  ...viewConfig,
+                  brands: {
+                    ...brandsCfg,
+                    manufacturer_mode: e.target.value
+                  }
+                })}
+              >
+                <option value="list">Liste in einer Spalte</option>
+                <option value="columns">Mehrere Hersteller‑Spalten (Ja/Nein)</option>
+                <option value="none">Keine Hersteller anzeigen</option>
+              </select>
+            </div>
+
+            {manufacturerMode === 'list' ? (
+              <>
+                <div style={{ minWidth: 260 }}>
+                  <div className="label">Hersteller‑Spalte (z.B. "manufacturer_keys")</div>
+                  <select
+                    className="input"
+                    value={manufacturerField}
+                    onChange={(e) => setViewConfig({ ...viewConfig, brands: { ...brandsCfg, manufacturer_mode: 'list', manufacturer_field: e.target.value } })}
+                  >
+                    <option value="">(wählen)</option>
+                    {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ minWidth: 220 }}>
+                  <div className="label">Trennzeichen (Regex)</div>
+                  <input
+                    className="input"
+                    value={manufacturerSep}
+                    onChange={(e) => setViewConfig({ ...viewConfig, brands: { ...brandsCfg, manufacturer_mode: 'list', manufacturer_separator: e.target.value } })}
+                    placeholder="[,;|]"
+                  />
+                </div>
+              </>
+            ) : null}
+
+            {manufacturerMode === 'columns' ? (
+              <div style={{ minWidth: 320, flex: 1 }}>
+                <div className="label">Hersteller‑Spalten (Wahr/Ja = aktiv)</div>
+                <div className="card" style={{ padding: 10, maxHeight: 180, overflow: 'auto' }}>
+                  <div className="row" style={{ flexWrap: 'wrap' }}>
+                    {columns.map((c) => (
+                      <label key={c} style={{ display: 'inline-flex', gap: 8, alignItems: 'center', marginRight: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={manufacturerFields.includes(c)}
+                          onChange={(e) => {
+                            const next = new Set(manufacturerFields);
+                            if (e.target.checked) next.add(c); else next.delete(c);
+                            setViewConfig({ ...viewConfig, brands: { ...brandsCfg, manufacturer_mode: 'columns', manufacturer_fields: Array.from(next) } });
+                          }}
+                        />
+                        <span className="muted" style={{ fontSize: 12 }}>{c}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="row" style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div style={{ minWidth: 260 }}>
+              <div className="label">Einkaufsverband‑Spalte (optional)</div>
+              <select
+                className="input"
+                value={buyingGroupField}
+                onChange={(e) => setViewConfig({ ...viewConfig, brands: { ...brandsCfg, buying_group_field: e.target.value } })}
+              >
+                <option value="">(keine)</option>
+                {columns.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Vorschau unten zeigt, welche Keys daraus gelesen werden.
+            </div>
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <div style={{ fontWeight: 800, marginBottom: 8 }}>Vorschau</div>
+            {!brandsPreview.length ? (
+              <div className="muted" style={{ fontSize: 12 }}>Keine Daten für Vorschau (dealers noch leer).</div>
+            ) : (
+              <div style={{ display: 'grid', gap: 10 }}>
+                {brandsPreview.map((p) => (
+                  <div key={p.row_index} className="card" style={{ padding: 12 }}>
+                    <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ fontWeight: 900 }}>{p.name}</div>
+                      {p.buying_group ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                          {bgIconByKey.get(p.buying_group) ? (
+                            <img alt={p.buying_group} src={bgIconByKey.get(p.buying_group)} style={{ width: 18, height: 18, objectFit: 'contain' }} />
+                          ) : (
+                            <span className="muted" style={{ fontSize: 12 }}>{p.buying_group}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="muted" style={{ fontSize: 12 }}>(kein Einkaufsverband)</span>
+                      )}
+                    </div>
+
+                    <div className="row" style={{ marginTop: 10, justifyContent: 'space-between' }}>
+                      <div style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+                        {(p.manufacturers || []).length ? (p.manufacturers || []).slice(0, 10).map((k) => (
+                          mIconByKey.get(k) ? (
+                            <img key={k} alt={k} title={k} src={mIconByKey.get(k)} style={{ width: 18, height: 18, objectFit: 'contain' }} />
+                          ) : (
+                            <span key={k} className="muted" style={{ fontSize: 12 }}>{k}</span>
+                          )
+                        )) : <span className="muted" style={{ fontSize: 12 }}>(keine Hersteller)</span>}
+                      </div>
+                      <a className="secondary" href={`/dealers/${p.row_index}`} style={{ textDecoration: 'none', padding: '6px 10px', fontSize: 12 }}>
+                        Öffnen
+                      </a>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       ) : null}

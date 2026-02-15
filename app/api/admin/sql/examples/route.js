@@ -17,7 +17,8 @@ export async function GET(req) {
     { name: '00 core users', file: 'core_users.sql' },
     { name: '01 exec_sql function', file: 'admin_exec_sql.sql' },
     { name: '02 apps registry', file: 'apps_registry.sql' },
-    { name: '03 import tables', file: 'import_tables.sql' }
+    { name: '03 import tables', file: 'import_tables.sql' },
+    { name: '04 manufacturers + buying groups', file: 'brands.sql' }
   ];
 
   const examples = [];

@@ -1,5 +1,5 @@
-import DatasetViewer from '@/app/ui/DatasetViewer';
+import DealersMapPage from '@/app/ui/DealersMapPage';
 
 export default function Page() {
-  return <DatasetViewer dataset="dealers" title="Händler" />;
+  return <DealersMapPage />;
 }
